@@ -2278,10 +2278,48 @@ CardNames(cards) {
             t .= p.t " "
         names.Push(Trim(t))
     }
+    for i, c in cards                              ; nothing read (e.g. "C.E.O."): this card alone, bigger
+        if (names[i] = "") {
+            t := ""
+            for w in Words(OcrRect(c.x - 175 * u, c.y + 44 * u, c.x - 50 * u, c.y + 78 * u, 5))
+                t .= w.t " "
+            names[i] := Trim(t)
+        }
     MT.ncAt := A_TickCount, MT.ncN := cards.Length, MT.ncY := cards.Length ? cards[1].y : 0, MT.ncNames := names
     return names
 }
 NormName(t) => RegExReplace(StrLower(t), "[^a-z0-9]")
+; how well a card text fits a unit name, 0..1 (cut-off names, OCR typos)
+NameScore(ocrText, name) {
+    a := NormName(ocrText), b := NormName(name)
+    if (StrLen(a) < 2 || StrLen(b) < 2)
+        return 0
+    if (InStr(a, b) || (StrLen(a) >= 3 && InStr(b, a)))
+        return 1
+    L := CommonRun(a, b)
+    best := (L >= 3) ? L / Min(StrLen(a), StrLen(b)) : 0
+    fw := NormName(RegExReplace(Trim(name), "\s.*$"))   ; first word of the name ("Vego")
+    if (StrLen(fw) >= 3)
+        for w in StrSplit(RegExReplace(ocrText, "[^A-Za-z0-9.]", " "), " ") {
+            w := NormName(w)
+            if (StrLen(w) >= 3)                    ; "Vege" for "Vego" = 0.75
+                best := Max(best, 1 - NameDist(w, fw) / Max(StrLen(w), StrLen(fw)))
+        }
+    return best
+}
+; the named slot a card belongs to (best score >= 0.6), or 0
+CardSlot(text) {
+    bestS := 0, bestV := 0.6
+    Loop 6 {
+        nm := Trim(CFG.Get("Name" A_Index, ""))
+        if (nm = "")
+            continue
+        v := NameScore(text, nm)
+        if (v > bestV || (v = bestV && !bestS))
+            bestV := v, bestS := A_Index
+    }
+    return bestS
+}
 NameMatch(ocrText, name) {
     a := NormName(ocrText), b := NormName(name)
     if (StrLen(a) < 2 || StrLen(b) < 2)
@@ -2341,10 +2379,36 @@ CardByName(u, nm) {
         if !r.open
             return ""
         names := CardNames(r.cards)
-        hits := []
-        for i, c in r.cards
-            if NameMatch(names[i], nm)
+        hits := [], blanks := [], seenN := Map()
+        for i, c in r.cards {
+            sl := CardSlot(names[i])
+            if (sl = u.slot)
                 hits.Push(c)
+            else if (!sl && NormName(names[i]) = "")
+                blanks.Push(c)
+            if sl
+                seenN[sl] := seenN.Get(sl, 0) + 1
+        }
+        if (hits.Length < k && blanks.Length && A_Index = 1) {
+            ; unreadable cards: if this is the only placed named unit still
+            ; missing cards, they must be its cards
+            missing := 0, others := false
+            for v in MT.units
+                if (Trim(CFG.Get("Name" v.slot, "")) != "") {
+                    cnt := 0
+                    for w in MT.units
+                        cnt += (w.slot = v.slot)
+                    if (seenN.Get(v.slot, 0) < cnt) {
+                        if (v.slot = u.slot)
+                            missing := 1
+                        else
+                            others := true
+                    }
+                }
+            if (missing && !others)
+                for c in blanks
+                    hits.Push(c)
+        }
         j := (A_Index = 2) ? k - (total - hits.Length) : k   ; scrolled: first copies hidden above
         if (j >= 1 && j <= hits.Length)
             return hits[j]
