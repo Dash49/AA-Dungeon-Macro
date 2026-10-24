@@ -32,7 +32,7 @@ global WIN := {id: 0, x: 0, y: 0, w: 1920, h: 1080, u: 1.0}
 global STATE := {run: false, pause: false, stop: false}
 ; one dungeon run / one match
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
-global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0}
+global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: ""}
 global MT := {}
 global CFG := Map()
 
@@ -68,6 +68,8 @@ LoadConfig() {
         "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
+        "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
+        "HillWalk", 2.5,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
             . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
             . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
@@ -540,6 +542,7 @@ DoVote(r) {
     if !RS.camVote {                               ; camera first, then start the game
         CameraSetup()
         RS.camVote := true
+        HillScan()                                 ; where the hills are (before the start)
         return
     }
     if !CFG["AutoVote"]
@@ -1209,6 +1212,9 @@ PlayMatch() {
     global MT
     Out("Match started - running the plan")
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
+    if IsObject(RS.hillScan)                        ; hill zones seen on the vote screen
+        MT.hillCells := RS.hillScan
+    RS.hillScan := ""
     ; the vote panel can still be there for a moment - never place during it
     Loop 20 {
         if !InStr(AllText(), "Starts in")
@@ -1303,7 +1309,7 @@ RunStep(st) {
                 }
                 if !WaitYen(CFG["Cost" st.slot], 60000)
                     return MatchOver() ? "end" : ""
-                r := PlaceUnit(st.slot, st.HasOwnProp("style") ? st.style : "random",
+                r := PlaceAny(st.slot, st.HasOwnProp("style") ? st.style : "random",
                     (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : ""))
                 if (r = "ok")
                     done++, t0 := A_TickCount
@@ -1398,6 +1404,8 @@ InUi(x, y) {
 AddCand(cands, cells, x, y, gap, maxN) {
     if (cands.Length >= maxN || InUi(x, y) || NearPath(cells, x, y, gap))
         return false
+    if (MT.HasOwnProp("hillCells") && MT.hillCells.Has(Floor(x / 14) * 4096 + Floor(y / 14)))
+        return false                               ; a hill: ground units can't stand there
     if IsRed(Color(PX(x), PY(y)))
         return false
     if (gap < 20) {                                ; tinted map: whole spot clear
@@ -1418,6 +1426,159 @@ AddCand(cands, cells, x, y, gap, maxN) {
     return true
 }
 
+; ------------------------------------------------------- hill units
+; Hill units can only stand on hills. While one is held, the hills show
+; as bright green zones (even on the vote screen, before the start).
+; Settings: Type1..Type6 = ground / hill, HillWalk = seconds per walk.
+IsHill(slot) => (StrLower(CFG.Get("Type" slot, "ground")) = "hill")
+
+IsGreen(col) {
+    r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
+    return (r < 60 && g > 165 && b >= 35 && b < 125 && g - b > 90)
+}
+GreenGrid(step := 12) {
+    m := Map()
+    y := 170
+    while (y <= 900) {
+        sy := PY(y), x := 130
+        while (x <= 1780) {
+            if IsGreen(Color(PX(x), sy))
+                m[x * 4096 + y] := [x, y]
+            x += step
+        }
+        y += step
+    }
+    return m
+}
+; ground units keep off the hills seen from the start position
+RememberHills(zone) {
+    if !MT.HasOwnProp("hillCells")
+        MT.hillCells := Map()
+    for gp in zone
+        Loop 3 {                                   ; the 12 px grid point covers ~3x3 cells
+            dx := A_Index - 2
+            Loop 3
+                MT.hillCells[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
+        }
+}
+; on the vote screen: hold the first hill unit for a moment to see the hills
+HillScan() {
+    slot := 0
+    Loop 6
+        if IsHill(A_Index) {
+            slot := A_Index
+            break
+        }
+    if !slot
+        return
+    Focus()
+    MouseMove(PX(960), PY(120))
+    Snap()
+    before := GreenGrid()
+    Key(slot)
+    Wait(300)
+    Snap()
+    m := Map(), n := 0
+    for k, gp in GreenGrid()
+        if !before.Has(k) {
+            n++
+            Loop 3 {
+                dx := A_Index - 2
+                Loop 3
+                    m[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
+            }
+        }
+    Key("q")
+    Wait(200)
+    RS.hillScan := m
+    Out("Hill check (unit " slot "): " (n >= 8 ? n " green points on screen" : "no hill on screen - will walk to find one"))
+}
+; spots inside the green zones, ordered by the placing style
+HillCands(zone, style, pt0, slot, path, cells) {
+    zm := Map()
+    for gp in zone
+        zm[gp[1] * 4096 + gp[2]] := 1
+    ps := [], stp := Max(1, path.Length // 300), i := 1
+    while (i <= path.Length)
+        ps.Push(path[i]), i += stp
+    pool := [], tries := 0
+    while (pool.Length < 120 && tries < 1500) {
+        tries++
+        gp := zone[Random(1, zone.Length)]
+        x := gp[1], y := gp[2]
+        ; well inside the zone: the grid points around it are green too
+        if !(zm.Has((x + 12) * 4096 + y) && zm.Has((x - 12) * 4096 + y)
+            && zm.Has(x * 4096 + y + 12) && zm.Has(x * 4096 + y - 12))
+            continue
+        if (InUi(x, y) || NearPath(cells, x, y, 14))
+            continue
+        ok := true
+        for v in MT.units
+            if (Abs(v.x - x) < 32 && Abs(v.y - y) < 28)
+                ok := false
+        for bd in MT.bad
+            if (Abs(bd.x - x) < 16 && Abs(bd.y - y) < 14)
+                ok := false
+        for c in pool
+            if (Abs(c.x - x) < 18 && Abs(c.y - y) < 16)
+                ok := false
+        if ok
+            pool.Push({x: x + Random(-4, 4), y: y + Random(-4, 4)})
+    }
+    anc := (style = "group") ? GroupAnchor(slot) : ""
+    return ScoreCands(pool, style, ps, pt0, anc)
+}
+Walk(k, sec) {
+    Focus()
+    Send("{" k " down}")
+    Sleep(Round(sec * 1000))
+    Send("{" k " up}")
+    Sleep(250)
+}
+; place any unit; a hill unit with no hill on screen walks W/D/S/A to look
+; for one, and always walks back to where it started
+PlaceAny(slot, style := "random", pt0 := "") {
+    r := PlaceUnit(slot, style, pt0)
+    if (r != "nozone")
+        return r
+    t := CFG.Get("HillWalk", 2.5) + 0
+    dirs := ["w", "d", "s", "a"], back := Map("w", "s", "s", "w", "a", "d", "d", "a")
+    if MT.HasOwnProp("hillDir") {                  ; the way that worked last time first
+        for i, d in dirs
+            if (d = MT.hillDir) {
+                dirs.RemoveAt(i), dirs.InsertAt(1, d)
+                break
+            }
+    }
+    Out("  unit " slot ": no hill on screen - walking to look for one (" t " s each way)")
+    for d in dirs {
+        if MatchOver()
+            return "end"
+        CloseOverview()
+        Walk(d, t)
+        MT.walked := true
+        r := PlaceUnit(slot, style, pt0)
+        Key("q")
+        CloseOverview()
+        Walk(back[d], t)                           ; back to the start position
+        MT.walked := false
+        if (r = "ok" || r = "fail") {              ; found hills that way
+            MT.hillDir := d
+            if (r = "ok") {
+                u := MT.units[MT.units.Length]     ; its screen spot was from the moved camera
+                u.x := -999, u.y := -999
+            }
+            Out("  unit " slot ": hills found walking " StrUpper(d) (r = "ok" ? " - placed" : " - could not place there"))
+            return r
+        }
+        if (r = "cap")
+            return r
+    }
+    Out("  unit " slot ": no hill found in any direction - skipping this unit this match")
+    MT.capped[slot] := true
+    return "cap"
+}
+
 ; Placing styles (plan.txt: place 1 x3 far / place 3 x2 at 900,500 ...)
 ;   random  a random spot 30-120 px off the path (default)
 ;   near    as close to the path as the game allows
@@ -1431,7 +1592,7 @@ PlaceCands(style, pt0, slot, path, cells, gap, tinted) {
     ps := [], stp := Max(1, path.Length // 300), i := 1
     while (i <= path.Length)
         ps.Push(path[i]), i += stp
-    pool := []
+    pool := [], anc := ""
     if (style = "at" && IsObject(pt0)) {
         for rr in [0, 22, 40, 60, 85, 115, 150, 190] {
             nA := (rr = 0) ? 1 : Round(rr / 6)
@@ -1476,7 +1637,11 @@ PlaceCands(style, pt0, slot, path, cells, gap, tinted) {
             }
         }
     }
-    ; best spots first
+    return ScoreCands(pool, style, ps, pt0, anc)
+}
+
+; order candidate spots by the placing style, best first (max 40)
+ScoreCands(pool, style, ps, pt0, anc) {
     for c in pool {
         switch style {
             case "near":   c.s := -MinDist(ps, c.x, c.y)
@@ -1484,7 +1649,7 @@ PlaceCands(style, pt0, slot, path, cells, gap, tinted) {
             case "cover":  c.s := CountNear(ps, c.x, c.y, 170)
             case "spread": c.s := MinUnitDist(c.x, c.y) + CountNear(ps, c.x, c.y, 150) * 0.3
             case "center": c.s := -Sqrt((c.x - 960) ** 2 + (c.y - 540) ** 2)
-            case "at":     c.s := -Sqrt((c.x - pt0.x) ** 2 + (c.y - pt0.y) ** 2)
+            case "at":     c.s := IsObject(pt0) ? -Sqrt((c.x - pt0.x) ** 2 + (c.y - pt0.y) ** 2) : 0
             case "group":
                 c.s := IsObject(anc) ? -Sqrt((c.x - anc.x) ** 2 + (c.y - anc.y) ** 2) : CountNear(ps, c.x, c.y, 170)
             default:       c.s := Random(0.0, 1.0) + (c.HasOwnProp("g") ? 1 : 0)
@@ -1524,7 +1689,7 @@ MinUnitDist(x, y) {
 }
 GroupAnchor(slot) {
     for v in MT.units
-        if (v.slot = slot)
+        if (v.slot = slot && v.x >= 0)
             return {x: v.x, y: v.y}
     return MT.HasOwnProp("lastGroup") ? MT.lastGroup : ""
 }
@@ -1552,6 +1717,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     Snap()
     base := (n0 >= 0) ? Max(ScanCards().Length, MT.units.Length) : 0
     before := RedGrid()                            ; red things that are part of the map
+    beforeG := IsHill(slot) ? GreenGrid() : ""     ; green things that are part of the map
     Key(slot)
     Wait(170)
     Snap()
@@ -1575,6 +1741,20 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     cells := Map()
     for pt in path
         cells[Floor(pt[1] / 14) * 4096 + Floor(pt[2] / 14)] := 1
+    hill := IsHill(slot)
+    if hill {                                      ; hill unit: only the green zones
+        zone := []
+        for k, gp in GreenGrid()
+            if !beforeG.Has(k)
+                zone.Push(gp)
+        if (zone.Length < 8) {
+            Key("q")                               ; no hill on this screen
+            Wait(250)
+            return "nozone"
+        }
+        if !MT.HasOwnProp("walked") || !MT.walked
+            RememberHills(zone)
+    }
     ; Some maps tint everything you can't build on red, not only the path.
     ; Then "near the path" means nothing: look for the non-red pockets.
     tinted := (path.Length > 1800)
@@ -1585,7 +1765,8 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     }
     if !MT.HasOwnProp("good")
         MT.good := []
-    cands := PlaceCands(style, pt0, slot, path, cells, gap, tinted)
+    cands := hill ? HillCands(zone, style, pt0, slot, path, cells)
+        : PlaceCands(style, pt0, slot, path, cells, gap, tinted)
     if (cands.Length = 0 && MT.bad.Length) {
         MT.bad := []
         Out("  every spot failed once - trying them again")

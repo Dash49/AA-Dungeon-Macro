@@ -29,6 +29,8 @@ global DEF := Map(
     "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
     "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
     "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
+    "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
+    "HillWalk", 2.5,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
         . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
         . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
@@ -94,7 +96,7 @@ BuildGui() {
     G := Gui("+MinSize800x650", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
-    tab := G.AddTab3("x10 y10 w780 h585", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ราคายูนิต / ทั่วไป"])
+    tab := G.AddTab3("x10 y10 w780 h585", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป"])
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
@@ -176,7 +178,7 @@ BuildGui() {
     y += 34
     AddNum("Open", "ห้องเปิด (Open)", 30, y), AddNum("Normal", "ห้องธรรมดา", 400, y)
     y += 34
-    AddNum("Lookahead", "น้ำหนักห้องถัดไป", 30, y, "0 = ไม่ดู, 0.5 = ครึ่งหนึ่ง")
+    AddNum("Lookahead", "น้ำหนักห้องถัดไป", 30, y, "0 = ไม่ดู, 0.5 = ครึ่งหนึ่ง", 300)
     y += 50
     G.AddGroupBox("x25 y" y " w750 h120", "ห้อง Curse")
     y += 28
@@ -217,10 +219,18 @@ BuildGui() {
 
     ; ------------------------------------------- แท็บ 4: ราคา / ทั่วไป
     tab.UseTab(4)
-    G.AddText("x25 y45 w750 cGray", "ราคาวางยูนิตแต่ละช่อง (ใช้เมื่ออ่านราคาจาก hotbar ไม่ได้)  มาโครจะรอจนเงินพอก่อนวาง")
-    Loop 6
-        AddNum("Cost" A_Index, "ราคาวาง ช่อง " A_Index, 30, 75 + (A_Index - 1) * 34, "¥")
-    G.AddGroupBox("x25 y300 w750 h150", "ทั่วไป")
+    G.AddText("x25 y45 w750 cGray", "ราคาวาง: ใช้เมื่ออ่านราคาจาก hotbar ไม่ได้     ประเภท: ยูนิตเนิน (hill) วางได้แค่บนโซนสีเขียว")
+    C.type := []
+    Loop 6 {
+        yy := 75 + (A_Index - 1) * 34
+        AddNum("Cost" A_Index, "ราคาวาง ช่อง " A_Index, 30, yy, "¥")
+        G.AddText("x420 y" (yy + 4) " w60", "ประเภท")
+        dd := G.AddDropDownList("x485 y" yy " w200 Choose1", ["พื้นดิน (ground)", "เนิน (hill)"])
+        dd.OnEvent("Change", (*) => MarkDirty())
+        C.type.Push(dd)
+    }
+    G.AddGroupBox("x25 y300 w750 h190", "ทั่วไป")
+    AddNum("HillWalk", "หาเนินไม่เจอ: เดินทางละ", 40, 434, "วินาที (เดิน W/D/S/A แล้วเดินกลับที่เดิม)", 420)
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
     C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
@@ -237,12 +247,12 @@ BuildGui() {
     UpdateBuilder()
 }
 
-AddNum(key, label, x, y, tip := "") {
+AddNum(key, label, x, y, tip := "", tipW := 100) {
     G.AddText("x" x " y" (y + 4) " w190", label)
     E[key] := G.AddEdit("x" (x + 195) " y" y " w80")
     E[key].OnEvent("Change", (*) => MarkDirty())
     if (tip != "")
-        G.AddText("x" (x + 282) " y" (y + 4) " w170 cGray", tip)
+        G.AddText("x" (x + 282) " y" (y + 4) " w" tipW " cGray", tip)
 }
 
 MarkDirty() {
@@ -740,6 +750,8 @@ LoadSettings() {
             C.vote.Value := (val + 0) ? 1 : 0
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
+        else if (SubStr(k, 1, 4) = "Type")
+            C.type[Integer(SubStr(k, 5))].Value := (StrLower(val) = "hill") ? 2 : 1
     }
     Filling := false
     RefreshItems()
@@ -761,6 +773,8 @@ SaveAll(restart) {
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
+        for i, dd in C.type
+            IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)
         SavePlan()
     } catch as err {
         MsgBox("บันทึกไม่สำเร็จ: " err.Message, "AA Dungeon", "Icon!")
