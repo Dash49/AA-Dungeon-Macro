@@ -1420,7 +1420,8 @@ WaitYen(cost, timeout) {
 ; on any map. Placed = the red path goes away (the unit left the hand).
 IsRed(col) {
     r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
-    return (r > 150 && g < 95 && b < 105 && r - g > 100)
+    return (r > 150 && g < 95 && b < 105 && r - g > 100)    ; red path on most maps
+        || (r > 200 && r - g > 80 && b >= 120 && r - b > 25) ; on blue / ice maps it shows pink (Marineford)
 }
 ; red points on the map (ref coords) from the last Snap -> Map(key -> [x, y])
 RedGrid(step := 12) {
@@ -1861,6 +1862,12 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     if (path.Length < 20 && FixFirstPerson())      ; first person hides the path
         return "fail"
     if (path.Length < 20) {                        ; nothing in hand (a real path is long)
+        if !MT.HasOwnProp("noPathLogged") {
+            MT.noPathLogged := true
+            c := Color(PX(960), PY(540))
+            Out("  unit " slot ": no red path seen after pressing " slot " (" path.Length " points, centre colour "
+                . Format("{:06X}", c) ")")
+        }
         t := OcrRef(300, 520, 1620, 900, 1)
         if (IsObject(t) && RegExMatch(t.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
             Out("  unit " slot ": the game allows only " m[1])
