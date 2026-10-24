@@ -932,19 +932,34 @@ MatchItem(text) {
     for it in ItemTable()
         if (it.key != "other" && InStr(t, it.key) && StrLen(it.key) > bl)
             best := it, bl := StrLen(it.key)
+    if IsObject(best)
+        return best
+    ; OCR typos ("N imb1e Cloak"): the name with one or two letters off
+    bestD := 99
+    for it in ItemTable() {
+        k := it.key, L := StrLen(k)
+        if (it.key = "other" || L < 5)
+            continue
+        allow := Max(1, L // 6)
+        Loop Max(1, StrLen(t) - L + 2) {
+            d := Min(NameDist(SubStr(t, A_Index, L), k), NameDist(SubStr(t, A_Index, L - 1), k))
+            if (d <= allow && d < bestD)
+                bestD := d, best := it
+        }
+    }
     return best
 }
 
-PriceOk(it, price) {
-    if (it.op = "")
+; "Mage Coat=35 >500" = buy it when you have more than 500 coins (as the
+; settings window and README say). Unknown coins -> allowed.
+PriceOk(it, price, coins := -1) {
+    if (it.op = "" || coins < 0)
         return true
-    if (price < 0)
-        return false
     switch it.op {
-        case ">":  return price > it.lim
-        case ">=": return price >= it.lim
-        case "<":  return price < it.lim
-        case "<=": return price <= it.lim
+        case ">":  return coins > it.lim
+        case ">=": return coins >= it.lim
+        case "<":  return coins < it.lim
+        case "<=": return coins <= it.lim
     }
     return true
 }
@@ -1033,7 +1048,7 @@ DoShop() {
             if bought.Has(it.name)
                 continue
             special := RegExMatch(txt, "i)luck|plac\w*\s*cost|cost\w*\s*(of\s*)?plac|deploy\w*\s*cost")
-            ok := PriceOk(it, rw.price), pts := it.pts, why := ""
+            ok := PriceOk(it, rw.price, coins), pts := it.pts, why := ""
             if special
                 ok := true, pts := Max(pts, 500), why := " [luck/place cost]"
             if rich
