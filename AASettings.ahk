@@ -27,6 +27,7 @@ global DEF := Map(
     "ShopRich", 60, "ShopMid", 20, "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000,
     "Curse", -10, "CurseMidDepth", 10, "CurseMid", -30, "CurseHighDepth", 15, "CurseHigh", -60,
     "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
+    "ShrineMode", "chest", "ShrineAvoid", "",
     "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
     "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
@@ -68,6 +69,8 @@ global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่ม
 global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
+global SHRINE_KEYS := ["chest", "points", "always", "never"]
+global SHRINE_TH := ["ได้หีบ = รับเสมอ ไม่สนคำสาป (แนะนำ)", "คิดจากคะแนน (หีบ + คำสาป)", "รับทุกครั้ง", "ไม่รับเลย"]
 global SlotNames := ["", "", "", "", "", ""]     ; unit names per hotbar slot (Name1..Name6)
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
@@ -193,9 +196,18 @@ BuildGui() {
     y += 34
     AddNum("CurseHigh", "Curse ช่วงลึก", 40, y), AddNum("CurseHighDepth", "ช่วงลึกเริ่มที่ Depth", 400, y)
     y += 50
-    G.AddGroupBox("x25 y" y " w750 h88", "Shrine (ห้องแลกพร)")
+    G.AddGroupBox("x25 y" y " w750 h178", "Shrine (ห้องแลกพร: ได้ของ แต่โดนคำสาป)")
     y += 28
-    AddNum("ShrineMin", "รับพรเมื่อคะแนนถึง", 40, y), AddNum("ShrineChest", "คะแนนพรที่ให้หีบ", 400, y)
+    G.AddText("x40 y" (y + 4) " w190", "เมื่อเจอ Shrine")
+    C.shrine := G.AddDropDownList("x235 y" y " w380 Choose1", SHRINE_TH)
+    C.shrine.OnEvent("Change", (*) => MarkDirty())
+    y += 34
+    G.AddText("x40 y" (y + 4) " w190", "คำสาปที่ไม่รับเด็ดขาด")
+    C.avoid := G.AddEdit("x235 y" y " w380")
+    C.avoid.OnEvent("Change", (*) => MarkDirty())
+    G.AddText("x622 y" (y + 4) " w150 cGray", "เช่น Health, Shield")
+    y += 34
+    AddNum("ShrineMin", "แบบคะแนน: รับเมื่อถึง", 40, y), AddNum("ShrineChest", "คะแนนพรที่ให้หีบ", 400, y)
     y += 34
     AddNum("ShrineRare", "คะแนนพรที่ให้หีบหายาก", 40, y)
 
@@ -788,6 +800,10 @@ LoadSettings() {
             C.save.Value := (val + 0) ? 1 : 0
         else if (k = "AutoVote")
             C.vote.Value := (val + 0) ? 1 : 0
+        else if (k = "ShrineMode")
+            C.shrine.Value := ArrIndex(SHRINE_KEYS, StrLower(val))
+        else if (k = "ShrineAvoid")
+            C.avoid.Value := val
         else if (k = "HillRun")
             C.run.Value := (val + 0) ? 1 : 0
         else if (k = "OnFinish")
@@ -818,6 +834,8 @@ SaveAll(restart) {
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
+        IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
+        IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)

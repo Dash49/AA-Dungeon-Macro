@@ -86,6 +86,7 @@ LoadConfig() {
         "ShopRich", 60, "ShopMid", 20, "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000,
         "Curse", -10, "CurseMidDepth", 10, "CurseMid", -30, "CurseHighDepth", 15, "CurseHigh", -60,
         "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
+        "ShrineMode", "chest", "ShrineAvoid", "",
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
@@ -1076,24 +1077,39 @@ ClickContinue() {
 DoShrine() {
     depth := RS.depth + 1
     r := OcrRef(780, 300, 1420, 680, 2)
-    total := 0, parts := ""
+    total := 0, parts := "", chest := false, curses := []
     for ln in Lines(r) {
         t := ln.t
         if RegExMatch(t, "i)Curse\s*of\s*(\w+)", &m) {
+            curses.Push(m[1])
             p := CursePts(depth)
             if (RegExMatch(m[1], "i)Flight|Burst") && p < 0)
                 p := Round(p / 2)
             total += p, parts .= m[0] " " p ", "
         } else if RegExMatch(t, "i)Rare\s*Chest") {
-            total += CFG["ShrineRare"], parts .= "Rare chest, "
+            total += CFG["ShrineRare"], parts .= "Rare chest, ", chest := true
         } else if (RegExMatch(t, "i)Treasure\s*Chest") && !RegExMatch(t, "i)\+\s*1")) {
-            total += CFG["ShrineChest"], parts .= "Chest, "
+            total += CFG["ShrineChest"], parts .= "Chest, ", chest := true
         } else if IsObject(it := MatchItem(t)) {
             total += it.pts, parts .= it.name ", "
         }
     }
-    take := total >= CFG["ShrineMin"]
-    Out("Shrine: " parts "= " total " -> " (take ? "ACCEPT" : "DENY"))
+    ; ShrineMode: chest = always take a chest whatever the curse, points = by
+    ; the points above, always / never. ShrineAvoid: curses never taken.
+    mode := StrLower(CFG.Get("ShrineMode", "chest"))
+    take := (mode = "always") ? true : (mode = "never") ? false
+        : (mode = "chest" && chest) ? true : (total >= CFG["ShrineMin"])
+    why := (mode = "always" || mode = "never") ? mode : (mode = "chest" && chest) ? "has a chest" : "points"
+    for cw in StrSplit(CFG.Get("ShrineAvoid", ""), [",", "|", " "]) {
+        cw := Trim(cw)
+        if (cw = "")
+            continue
+        for c in curses
+            if InStr(c, cw) {
+                take := false, why := "curse of " c " is on the never list"
+            }
+    }
+    Out("Shrine: " parts "= " total " -> " (take ? "ACCEPT" : "DENY") " (" why ")")
     b := OcrRef(820, 700, 1500, 800, 1)
     if take {
         if Find(b, "ACCEPT", &x, &y)
