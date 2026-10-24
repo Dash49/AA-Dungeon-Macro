@@ -1498,7 +1498,9 @@ PlaceUnit(slot) {
         for pt in watch
             red += IsRed(Color(PX(pt[1]), PY(pt[2])))
         if (red * 4 < watch.Length) {              ; the path is not red any more
-            if (n0 >= 0) {                         ; did a card really appear?
+            if !MT.HasOwnProp("fake")
+                MT.fake := Map()
+            if (n0 >= 0 && MT.fake.Get(slot, 0) < 3) { ; did a card really appear?
                 ; the game also drops the unit from the hand when the spot is
                 ; refused or the unit limit is reached - check what happened
                 got := -1
@@ -1516,7 +1518,10 @@ PlaceUnit(slot) {
                     MT.capped[slot] := true
                     return "cap"
                 }
+                    MT.fake[slot] := MT.fake.Get(slot, 0) + 1
                     Out("  unit " slot ": not really placed at " Round(c.x) "," Round(c.y) " (cards " got ") - trying again")
+                    if (MT.fake[slot] = 3)
+                        Out("  unit " slot ": card check keeps failing here - trusting the red path from now on")
                     MT.bad.Push(c)
                     return "fail"
                 }
@@ -1543,6 +1548,8 @@ PlaceUnit(slot) {
                 }
             }
             MT.streak := 0
+            if MT.HasOwnProp("fake") && MT.fake.Get(slot, 0) < 3
+                MT.fake[slot] := 0
             n := 1
             for v in MT.units
                 n += (v.slot = slot) ? 1 : 0
@@ -1657,6 +1664,11 @@ CloseOverview() {
 ; "Upg" buttons, which shifted every card after it). Each card has a
 ; cyan "First" button; the Upg button is 45 above it, the bar under it.
 ; card = {x, y (Upg button centre), buy (button bright = enough yen), max}
+IsCyan(col) {
+    r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
+    return (b > 200 && g > 150 && r < 90)
+}
+
 ScanCards() {
     u := WIN.u, cards := []
     for bx in [1491, 1776] {
@@ -1670,8 +1682,12 @@ ScanCards() {
                     top := y
                 runLen++
             } else if runLen {
-                if (runLen >= 26 * u && top > PY(152)) {
-                    fy := top + runLen / 2
+                fy := top + runLen // 2
+                ; a real "First" button: button height, and cyan on its right
+                ; side too, past the white text (cyan map stuff behind the
+                ; see-through panel is not shaped like that)
+                if (runLen >= 26 * u && runLen <= 50 * u && top > PY(152)
+                    && IsCyan(Color(PX(bx + 45, "r"), fy))) {
                     uy := fy - 45 * u
                     g := RGB(Color(sx, uy - 13 * u))
                     cards.Push({x: PX(bx, "r"), y: uy, buy: (g.g > 170 && g.r < 130 && g.b < 100), max: false, cost: -1})
