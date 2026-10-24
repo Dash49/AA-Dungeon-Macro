@@ -102,3 +102,44 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--max-turns 60"
+
+  # Pull requests made by the bot do not start other workflows, so check the
+  # fix branch here: load both scripts in real AutoHotkey v2 and say the result.
+  validate-fix:
+    needs: auto-fix
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check out the fix branch
+        id: co
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $b = "claude/issue-${{ github.event.issue.number }}"
+          git clone --depth 1 --branch $b "https://x-access-token:$env:GH_TOKEN@github.com/${{ github.repository }}.git" src 2>$null
+          if ($LASTEXITCODE -ne 0) { Write-Host "no fix branch - nothing to check"; "skip=1" >> $env:GITHUB_OUTPUT } else { "skip=0" >> $env:GITHUB_OUTPUT }
+      - name: Validate with AutoHotkey v2
+        if: steps.co.outputs.skip == '0'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Invoke-WebRequest "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.19/AutoHotkey_2.0.19.zip" -OutFile ahk.zip
+          Expand-Archive ahk.zip -DestinationPath ahk
+          $exe = (Get-ChildItem ahk -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1).FullName
+          $report = ""; $ok = $true
+          foreach ($f in @("AADungeon.ahk", "AASettings.ahk")) {
+            $p = Start-Process -FilePath $exe -ArgumentList "/ErrorStdOut", "/Validate", "src\$f" -Wait -PassThru -NoNewWindow -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+            $msg = ((Get-Content out.txt -Raw) + (Get-Content err.txt -Raw)) -replace "`r", ""
+            if ($p.ExitCode -ne 0) { $ok = $false; $report += "- ``$f``: โหลดไม่ผ่าน`n``````n$msg`n```````n" } else { $report += "- ``$f``: ผ่าน`n" }
+          }
+          $head = if ($ok) { "✅ เช็คแล้ว: สคริปต์ใน branch แก้บั๊กเปิดได้ใน AutoHotkey v2" } else { "❌ เช็คแล้ว: สคริปต์ใน branch แก้บั๊กเปิดไม่ได้ อย่าเพิ่ง merge" }
+          $pr = gh pr list --repo ${{ github.repository }} --head "claude/issue-${{ github.event.issue.number }}" --json number --jq ".[0].number"
+          $target = if ($pr) { $pr } else { "${{ github.event.issue.number }}" }
+          gh issue comment $target --repo ${{ github.repository }} --body "$head`n$report"
+          if (-not $ok) { exit 1 }
