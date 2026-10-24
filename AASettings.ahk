@@ -30,7 +30,7 @@ global DEF := Map(
     "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
     "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
-    "HillWalk", 2.5,
+    "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
         . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
         . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
@@ -232,8 +232,13 @@ BuildGui() {
         dd.OnEvent("Change", (*) => MarkDirty())
         C.type.Push(dd)
     }
-    G.AddGroupBox("x25 y300 w750 h190", "ทั่วไป")
-    AddNum("HillWalk", "หาเนินไม่เจอ: เดินทางละ", 40, 434, "วินาที (เดิน W/D/S/A แล้วเดินกลับที่เดิม)", 420)
+    G.AddGroupBox("x25 y300 w750 h285", "ทั่วไป / กล้อง / หาเนิน")
+    AddNum("CamZoom", "ระยะกล้อง (ซูมออกกี่ขีด)", 40, 432, "มาก = ไกล  (0-30, ค่าเริ่มต้น 24)", 420)
+    AddNum("HillWalk", "หาเนินไม่เจอ: เดินทางละ", 40, 466, "วินาที (W/D/S/A แล้วเดินกลับที่เดิม)", 420)
+    AddNum("HillZoomStep", "ไม่เจอ: ซูมเข้าทีละ", 40, 500, "ขีด", 60)
+    AddNum("HillZoomTries", "ซูมเข้าสูงสุด", 400, 500, "ครั้ง", 60)
+    C.run := G.AddCheckbox("x40 y538 w700", "กด Shift วิ่งตอนเดินหาเนิน  (เจอเนินหลังซูมเข้า = ใช้ระยะกล้องนั้นต่อไป)")
+    C.run.OnEvent("Click", (*) => MarkDirty())
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
     C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
@@ -752,6 +757,8 @@ LoadSettings() {
             C.save.Value := (val + 0) ? 1 : 0
         else if (k = "AutoVote")
             C.vote.Value := (val + 0) ? 1 : 0
+        else if (k = "HillRun")
+            C.run.Value := (val + 0) ? 1 : 0
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
         else if (SubStr(k, 1, 4) = "Type")
@@ -776,6 +783,7 @@ SaveAll(restart) {
         IniWrite(ItemsString(), INI, "Settings", "Items")
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
+        IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)

@@ -89,7 +89,7 @@ LoadConfig() {
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
-        "HillWalk", 2.5,
+        "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
             . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
             . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
@@ -527,7 +527,7 @@ CameraSetup(way := 1) {
         Sleep 25
     }
     Sleep 150
-    Loop 24 {                                      ; then out to a fixed distance
+    Loop CamZoomNow() {                            ; then out to the set distance
         Click "WheelDown"
         Sleep 40
     }
@@ -1501,10 +1501,9 @@ HillScan() {
         }
     if !slot
         return
-    n := HillLook(slot, &m)
-    if (n >= 8) {
+    if LookHere(slot, &m) {
         RS.hillScan := m
-        Out("Hill check (unit " slot "): " n " green points on screen")
+        Out("Hill check (unit " slot "): hills on screen")
         return
     }
     t := CFG.Get("HillWalk", 2.5) + 0
@@ -1519,10 +1518,9 @@ HillScan() {
     Out("Hill check (unit " slot "): no hill on screen - walking to find one before the start")
     for d in dirs {
         Walk(d, t)
-        n := HillLook(slot, &m)
-        if (n >= 8) {
+        if LookHere(slot, &m) {
             RS.hillScan := m, RS.hillDir := d
-            Out("  hills found walking " StrUpper(d) " (" n " green points) - staying here")
+            Out("  hills found walking " StrUpper(d) " - staying here")
             return
         }
         Walk(back[d], t)
@@ -1590,15 +1588,59 @@ HillCands(zone, style, pt0, slot, path, cells) {
 }
 Walk(k, sec) {
     Focus()
+    run := CFG.Get("HillRun", 1) + 0               ; hold Shift = run
+    if run
+        Send("{LShift down}")
     Send("{" k " down}")
     Sleep(Round(sec * 1000))
     Send("{" k " up}")
+    if run
+        Send("{LShift up}")
     Sleep(250)
+}
+; look for hills here; if none, zoom in a little at a time (HillZoomStep
+; notches, HillZoomTries times). Found after zooming -> keep that zoom.
+; Not found -> zoom back out to where it was.
+LookHere(slot, &m) {
+    if (HillLook(slot, &m) >= 8)
+        return true
+    zs := CFG.Get("HillZoomStep", 3) + 0, zt := CFG.Get("HillZoomTries", 2) + 0
+    if (zs <= 0 || zt <= 0)
+        return false
+    Loop zt {
+        ZoomBy(zs)
+        if (HillLook(slot, &m) >= 8) {
+            LockZoom(zs * A_Index)
+            return true
+        }
+    }
+    ZoomBy(-zs * zt)
+    return false
+}
+; the same for placing: try PlaceUnit, zooming in step by step while it
+; sees no hill
+PlaceZoomed(slot, style, pt0) {
+    r := PlaceUnit(slot, style, pt0)
+    zs := CFG.Get("HillZoomStep", 3) + 0, zt := CFG.Get("HillZoomTries", 2) + 0
+    if (r != "nozone" || zs <= 0 || zt <= 0)
+        return r
+    Loop zt {
+        CloseOverview()
+        ZoomBy(zs)
+        r := PlaceUnit(slot, style, pt0)
+        if (r != "nozone") {
+            LockZoom(zs * A_Index)
+            return r
+        }
+    }
+    CloseOverview()
+    ZoomBy(-zs * zt)
+    return "nozone"
 }
 ; place any unit; a hill unit with no hill on screen walks W/D/S/A to look
 ; for one, and always walks back to where it started
 PlaceAny(slot, style := "random", pt0 := "") {
-    r := PlaceUnit(slot, style, pt0)
+    r := IsHill(slot) ? PlaceZoomed(slot, style, pt0) : PlaceUnit(slot, style, pt0)
     if (r != "nozone")
         return r
     t := CFG.Get("HillWalk", 2.5) + 0
@@ -1617,7 +1659,7 @@ PlaceAny(slot, style := "random", pt0 := "") {
         CloseOverview()
         Walk(d, t)
         MT.walked := true
-        r := PlaceUnit(slot, style, pt0)
+        r := PlaceZoomed(slot, style, pt0)
         Key("q")
         CloseOverview()
         Walk(back[d], t)                           ; back to the start position
@@ -2163,6 +2205,28 @@ FixFirstPerson() {
 }
 
 ; first person locks the mouse in the middle - zoom back out with O
+; camera distance in wheel notches out from fully zoomed in: the setting
+; CamZoom, or the closer one locked when hills only showed after zooming in
+CamZoomNow() {
+    z := RS.HasOwnProp("zoomLock") ? RS.zoomLock : CFG.Get("CamZoom", 24) + 0
+    return Max(0, Min(30, Round(z)))
+}
+; n > 0 zooms in, n < 0 zooms out (mouse over the middle of the map)
+ZoomBy(n) {
+    Focus()
+    MouseMove(Round(PX(960)), Round(PY(540)))
+    Sleep 60
+    Loop Abs(n) {
+        Click(n > 0 ? "WheelUp" : "WheelDown")
+        Sleep 40
+    }
+    Sleep 250
+}
+LockZoom(stepsIn) {
+    RS.zoomLock := Max(0, CamZoomNow() - stepsIn)
+    Out("  camera zoom locked at " RS.zoomLock " (hills showed after zooming in)")
+}
+
 ZoomOutKeys(n := 15) {
     Focus()
     Loop n {
