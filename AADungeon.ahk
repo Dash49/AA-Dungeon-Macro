@@ -70,7 +70,7 @@ OpenSettings(arg := "") {
 
 LoadConfig()
 FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =====`n", LOGFILE, "UTF-8")
-Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)")
+Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode: " CFG["Preset"])
 Status("AA Dungeon ready - F2 start")
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 return
@@ -86,7 +86,7 @@ LoadConfig() {
         "ShopRich", 60, "ShopMid", 20, "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000,
         "Curse", -10, "CurseMidDepth", 10, "CurseMid", -30, "CurseHighDepth", 15, "CurseHigh", -60,
         "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
-        "ShrineMode", "chest", "ShrineAvoid", "",
+        "ShrineMode", "chest", "ShrineAvoid", "", "Preset", "balanced",
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",

@@ -27,7 +27,7 @@ global DEF := Map(
     "ShopRich", 60, "ShopMid", 20, "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000,
     "Curse", -10, "CurseMidDepth", 10, "CurseMid", -30, "CurseHighDepth", 15, "CurseHigh", -60,
     "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
-    "ShrineMode", "chest", "ShrineAvoid", "",
+    "ShrineMode", "chest", "ShrineAvoid", "", "Preset", "balanced",
     "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
     "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
@@ -69,6 +69,51 @@ global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่ม
 global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
+; ready-made settings for room choice, curses, shrines and the shop
+global PRESETS := [
+    {key: "beginner", th: "🟢 มือใหม่ (ปลอดภัยไว้ก่อน)",
+     desc: "เลี่ยงห้อง Curse ให้มากที่สุด ไม่รับ Shrine เน้นผ่านด่านให้ได้ก่อน เหมาะกับทีมที่ยังไม่แข็ง",
+     vals: Map("Boss", 100, "Chest", 40, "Hoard", 30, "Shrine", 0, "Open", 10, "Normal", 5, "Curse", -60, "CurseMid", -120,
+        "CurseHigh", -200, "CurseMidDepth", 8, "CurseHighDepth", 14, "Lookahead", 0.5, "ShopRich", 50, "ShopMid", 25,
+        "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2500, "ShrineMode", "never",
+        "ShrineMin", 50, "ShrineChest", 20, "ShrineRare", 35)},
+    {key: "balanced", th: "🔵 สมดุล (ค่าเริ่มต้น)",
+     desc: "ชอบห้องหีบ เลี่ยง Curse พอประมาณ (หนักขึ้นเมื่อลึก) Shrine ที่ให้หีบรับเสมอ",
+     vals: Map("Boss", 100, "Chest", 70, "Hoard", 20, "Shrine", 25, "Open", 5, "Normal", 0, "Curse", -10, "CurseMid", -30,
+        "CurseHigh", -60, "CurseMidDepth", 10, "CurseHighDepth", 15, "Lookahead", 0.5, "ShopRich", 60, "ShopMid", 20,
+        "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000, "ShrineMode", "chest",
+        "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35)},
+    {key: "chest", th: "🟡 ล่าหีบ (หีบมาก่อนเสมอ)",
+     desc: "หีบสำคัญที่สุด ยอมเข้า Curse ถ้าได้หีบ มองห้องถัดไปมากขึ้น Shrine ที่ให้หีบรับเสมอ",
+     vals: Map("Boss", 100, "Chest", 130, "Hoard", 20, "Shrine", 45, "Open", 5, "Normal", 0, "Curse", -5, "CurseMid", -15,
+        "CurseHigh", -35, "CurseMidDepth", 10, "CurseHighDepth", 16, "Lookahead", 0.8, "ShopRich", 45, "ShopMid", 15,
+        "ShopPoor", 0, "ShopRichCoins", 1200, "ShopMidCoins", 700, "ShopBuyAll", 2500, "ShrineMode", "chest",
+        "ShrineMin", 20, "ShrineChest", 40, "ShrineRare", 60)},
+    {key: "advanced", th: "🔴 ขั้นสูง (ของเยอะสุด เสี่ยงสุด)",
+     desc: "สำหรับทีมแข็ง: เข้า Curse ได้แทบไม่สน รับ Shrine ทุกครั้ง หีบ+Hoard สูง มองห้องถัดไปเต็มที่",
+     vals: Map("Boss", 100, "Chest", 150, "Hoard", 50, "Shrine", 60, "Open", 5, "Normal", 0, "Curse", 0, "CurseMid", -10,
+        "CurseHigh", -20, "CurseMidDepth", 12, "CurseHighDepth", 18, "Lookahead", 1.0, "ShopRich", 60, "ShopMid", 30,
+        "ShopPoor", 5, "ShopRichCoins", 1000, "ShopMidCoins", 500, "ShopBuyAll", 1500, "ShrineMode", "always",
+        "ShrineMin", 0, "ShrineChest", 40, "ShrineRare", 60)},
+    {key: "coins", th: "💰 ฟาร์มเหรียญ + ร้านค้า",
+     desc: "เน้น Hoard (เหรียญ) และร้านค้าเพื่อซื้อของเพิ่มพลัง ซื้อทุกอย่างเมื่อเหรียญเกิน 1500",
+     vals: Map("Boss", 100, "Chest", 50, "Hoard", 90, "Shrine", 20, "Open", 5, "Normal", 0, "Curse", -15, "CurseMid", -35,
+        "CurseHigh", -70, "CurseMidDepth", 10, "CurseHighDepth", 15, "Lookahead", 0.6, "ShopRich", 100, "ShopMid", 50,
+        "ShopPoor", 0, "ShopRichCoins", 900, "ShopMidCoins", 500, "ShopBuyAll", 1500, "ShrineMode", "chest",
+        "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35)},
+    {key: "deep", th: "🛡 ลงลึกให้รอด (เน้นถึงบอส)",
+     desc: "ช่วงต้นเก็บของได้ แต่ยิ่งลึกยิ่งหนี Curse หนัก เก็บเงินซื้อของในร้านไว้สู้ช่วงท้าย Shrine คิดจากคะแนน",
+     vals: Map("Boss", 100, "Chest", 60, "Hoard", 30, "Shrine", 15, "Open", 10, "Normal", 5, "Curse", -10, "CurseMid", -80,
+        "CurseHigh", -200, "CurseMidDepth", 8, "CurseHighDepth", 13, "Lookahead", 0.7, "ShopRich", 80, "ShopMid", 40,
+        "ShopPoor", 10, "ShopRichCoins", 900, "ShopMidCoins", 500, "ShopBuyAll", 2000, "ShrineMode", "points",
+        "ShrineMin", 30, "ShrineChest", 25, "ShrineRare", 40)},
+    {key: "nocurse", th: "🚫 ไม่เอาคำสาปเลย",
+     desc: "ไม่เข้าห้อง Curse และไม่รับ Shrine เด็ดขาด (ถ้ามีทางเลือกอื่น) ช้ากว่าแต่ปลอดภัยที่สุด",
+     vals: Map("Boss", 100, "Chest", 60, "Hoard", 30, "Shrine", 0, "Open", 10, "Normal", 5, "Curse", -1000, "CurseMid", -1000,
+        "CurseHigh", -1000, "CurseMidDepth", 10, "CurseHighDepth", 15, "Lookahead", 0.5, "ShopRich", 60, "ShopMid", 25,
+        "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000, "ShrineMode", "never",
+        "ShrineMin", 999, "ShrineChest", 20, "ShrineRare", 35)}
+]
 global SHRINE_KEYS := ["chest", "points", "always", "never"]
 global SHRINE_TH := ["ได้หีบ = รับเสมอ ไม่สนคำสาป (แนะนำ)", "คิดจากคะแนน (หีบ + คำสาป)", "รับทุกครั้ง", "ไม่รับเลย"]
 global SlotNames := ["", "", "", "", "", ""]     ; unit names per hotbar slot (Name1..Name6)
@@ -95,16 +140,16 @@ LoadSettings()
 if Steps.Length
     FillBuilder(Steps[1])
 Dirty := false
-G.Show("w800 h680")
+G.Show("w800 h720")
 return
 
 ; ============================================================== GUI
 BuildGui() {
     global G
-    G := Gui("+MinSize800x680", "AA Dungeon - ตั้งค่ามาโคร")
+    G := Gui("+MinSize800x720", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
-    tab := G.AddTab3("x10 y10 w780 h585", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป"])
+    tab := G.AddTab3("x10 y10 w780 h625", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป"])
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
@@ -178,8 +223,17 @@ BuildGui() {
 
     ; ---------------------------------------------- แท็บ 2: เลือกห้อง
     tab.UseTab(2)
-    G.AddText("x25 y45 w750 cGray", "คะแนนห้อง: มาโครจะเลือกเส้นทางที่คะแนนรวมสูงสุด  ตัวเลขติดลบ = พยายามเลี่ยง")
-    y := 80
+    G.AddText("x25 y45 w750 cGray", "เลือกโหมดสำเร็จรูปแล้วกด 'ใช้โหมดนี้' จะตั้งค่าด้านล่างให้ทั้งหมด (ปรับเองต่อได้) แล้วกดบันทึก")
+    G.AddText("x30 y78 w60", "โหมด")
+    pnames := []
+    for pr in PRESETS
+        pnames.Push(pr.th)
+    C.preset := G.AddDropDownList("x95 y74 w330 Choose2", pnames)
+    C.preset.OnEvent("Change", (*) => (C.pdesc.Text := PRESETS[C.preset.Value].desc))
+    G.AddButton("x435 y72 w140 h28", "✔ ใช้โหมดนี้").OnEvent("Click", (*) => ApplyPreset())
+    C.pdesc := G.AddText("x30 y106 w740 h36 cBlue", PRESETS[2].desc)
+    G.AddText("x25 y146 w750 cGray", "คะแนนห้อง: มาโครจะเลือกเส้นทางที่คะแนนรวมสูงสุด  ตัวเลขติดลบ = พยายามเลี่ยง")
+    y := 170
     AddNum("Boss", "ห้องบอส", 30, y), AddNum("Chest", "ห้องหีบ (Chest)", 400, y)
     y += 34
     AddNum("Hoard", "ห้อง Hoard", 30, y), AddNum("Shrine", "ห้อง Shrine", 400, y)
@@ -187,7 +241,7 @@ BuildGui() {
     AddNum("Open", "ห้องเปิด (Open)", 30, y), AddNum("Normal", "ห้องธรรมดา", 400, y)
     y += 34
     AddNum("Lookahead", "น้ำหนักห้องถัดไป", 30, y, "0 = ไม่ดู, 0.5 = ครึ่งหนึ่ง", 300)
-    y += 50
+    y += 42
     G.AddGroupBox("x25 y" y " w750 h120", "ห้อง Curse")
     y += 28
     AddNum("Curse", "Curse (ช่วงแรก)", 40, y)
@@ -195,7 +249,7 @@ BuildGui() {
     AddNum("CurseMid", "Curse ช่วงกลาง", 40, y), AddNum("CurseMidDepth", "ช่วงกลางเริ่มที่ Depth", 400, y)
     y += 34
     AddNum("CurseHigh", "Curse ช่วงลึก", 40, y), AddNum("CurseHighDepth", "ช่วงลึกเริ่มที่ Depth", 400, y)
-    y += 50
+    y += 40
     G.AddGroupBox("x25 y" y " w750 h178", "Shrine (ห้องแลกพร: ได้ของ แต่โดนคำสาป)")
     y += 28
     G.AddText("x40 y" (y + 4) " w190", "เมื่อเจอ Shrine")
@@ -269,11 +323,11 @@ BuildGui() {
 
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
-    G.AddButton("x10 y605 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
-    G.AddButton("x140 y605 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
-    G.AddButton("x370 y605 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
-    G.AddButton("x530 y605 w160 h35", "🔄 อัปเดตมาโคร").OnEvent("Click", (*) => UpdateMacro())
-    C.status := G.AddText("x12 y650 w776 cGreen", "")
+    G.AddButton("x10 y645 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
+    G.AddButton("x140 y645 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
+    G.AddButton("x370 y645 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
+    G.AddButton("x530 y645 w160 h35", "🔄 อัปเดตมาโคร").OnEvent("Click", (*) => UpdateMacro())
+    C.status := G.AddText("x12 y690 w776 cGreen", "")
     UpdateBuilder()
 }
 
@@ -664,6 +718,19 @@ SavePlan() {
     f.Close()
 }
 
+; fill the room / shop / shrine boxes from the chosen preset (saved on Save)
+ApplyPreset() {
+    pr := PRESETS[C.preset.Value]
+    for k, v in pr.vals {
+        if E.Has(k)
+            E[k].Value := v
+        else if (k = "ShrineMode")
+            C.shrine.Value := ArrIndex(SHRINE_KEYS, v)
+    }
+    MarkDirty()
+    C.status.Text := "ตั้งค่าตามโหมด " pr.th " แล้ว - กดบันทึก"
+}
+
 ; ---- pick a spot on the game screen (for "กำหนดจุดเอง")
 ; The click is caught here and does not reach the game.
 PickSpot() {
@@ -802,6 +869,11 @@ LoadSettings() {
             C.vote.Value := (val + 0) ? 1 : 0
         else if (k = "ShrineMode")
             C.shrine.Value := ArrIndex(SHRINE_KEYS, StrLower(val))
+        else if (k = "Preset") {
+            for i, pr in PRESETS
+                if (pr.key = StrLower(val))
+                    C.preset.Value := i, C.pdesc.Text := pr.desc
+        }
         else if (k = "ShrineAvoid")
             C.avoid.Value := val
         else if (k = "HillRun")
@@ -835,6 +907,7 @@ SaveAll(restart) {
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
         IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
+        IniWrite(PRESETS[C.preset.Value].key, INI, "Settings", "Preset")
         IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         for i, dd in C.type
