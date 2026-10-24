@@ -92,10 +92,11 @@ LoadConfig() {
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-        "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
-            . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
-            . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
-            . "|Reaper Scythe=0|Ninja Belt=0|Celestial Blade=0|Other=20 >1000")
+        "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
+            . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
+            . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
+            . "|Golden Branch=40|Elf Bow=40|Ninja Belt=35|Sword=35|Mage Coat=30|Axe=30|Nimble Cloak=25|Bow=25"
+            . "|Dagger=20|Other=20 >1000")
     for k, v in d {
         val := IniRead(INI, "Settings", k, "`a")
         if (val = "`a")                            ; new setting - add it to the file
@@ -928,6 +929,29 @@ ItemTable() {
     return res_
 }
 
+; items_seen.txt: one line per item the shop ever showed - name|effect|price|date
+; (the settings window lists them so they can be added to the buy list)
+RecordSeen(name, effect, price) {
+    static known := ""
+    f := A_ScriptDir "\items_seen.txt"
+    key := RegExReplace(StrLower(name), "[^a-z]")
+    if (StrLen(key) < 3)
+        return
+    if !IsObject(known) {
+        known := Map()
+        if FileExist(f)
+            for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r")
+                if (Trim(ln) != "")
+                    known[RegExReplace(StrLower(StrSplit(ln, "|")[1]), "[^a-z]")] := 1
+    }
+    if known.Has(key)
+        return
+    known[key] := 1
+    try FileAppend(Trim(StrReplace(name, "|", " ")) "|" Trim(StrReplace(effect, "|", " ")) "|" price "|"
+        . A_YYYY "-" A_MM "-" A_DD "`n", f, "UTF-8")
+    Out("  new shop item noted: " name " (" effect ")")
+}
+
 MatchItem(text) {
     t := StrLower(RegExReplace(text, "[^A-Za-z]"))
     if (StrLen(t) < 4)
@@ -1021,6 +1045,7 @@ DoShop() {
     Out("Shop  coins " coins (rich ? "  (over " CFG["ShopBuyAll"] " - buying everything)" : ""))
     bought := Map()
     Loop 8 {
+        pass := A_Index
         ; the 3 item rows sit at fixed places; a row is there when its
         ; yellow price button is (bought items lose the button)
         Snap()
@@ -1049,6 +1074,9 @@ DoShop() {
                         it := {name: first, pts: o.pts, op: o.op, lim: o.lim}
             if !IsObject(it)
                 it := {name: first, pts: 0, op: "", lim: 0}
+            if (pass = 1 && txt != "?")                ; remember every item ever seen
+                RecordSeen(it.HasOwnProp("key") && it.key != "other" ? it.name : first,
+                    Trim(RegExReplace(SubStr(rw.txt, StrLen(StrSplit(rw.txt, "`n")[1]) + 1), "\s+", " ")), rw.price)
             if bought.Has(it.name)
                 continue
             special := RegExMatch(txt, "i)luck|plac\w*\s*cost|cost\w*\s*(of\s*)?plac|deploy\w*\s*cost")

@@ -33,10 +33,11 @@ global DEF := Map(
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-    "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
-        . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
-        . "|Speedy Boots=30|Glacial Axe=30|Golden Branch=30|Dagger=20|Nimble Cloak=20"
-        . "|Reaper Scythe=0|Ninja Belt=0|Celestial Blade=0|Other=20 >1000")
+    "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
+        . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
+        . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
+        . "|Golden Branch=40|Elf Bow=40|Ninja Belt=35|Sword=35|Mage Coat=30|Axe=30|Nimble Cloak=25|Bow=25"
+        . "|Dagger=20|Other=20 >1000")
 
 global EXAMPLE_PLAN := "
 (
@@ -69,6 +70,34 @@ global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่ม
 global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
+global Seen := []                ; items the shop has shown (items_seen.txt)
+; known dungeon shop items (from the game wiki + shop pictures): name, effect, suggested points
+global ITEMDB := [
+    {name: "Mask of Riches", eff: "-50% ค่าวาง/อัปเกรด", pts: 100},
+    {name: "Philosophers Stone", eff: "เปลี่ยนหีบทั้งหมดเป็นหีบหายาก", pts: 95},
+    {name: "Genie Lamp", eff: "+100% โชคหีบ (luck)", pts: 90},
+    {name: "Golden Mushroom", eff: "-30% ค่าวาง/อัปเกรด", pts: 85},
+    {name: "Celestial Blade", eff: "+777% true damage, +75% attack", pts: 80},
+    {name: "Golden Fishhook", eff: "+40% โชคหีบ (luck)", pts: 75},
+    {name: "Archmage's Hat", eff: "+250% magic damage", pts: 70},
+    {name: "Aures Maul", eff: "+200% physical damage", pts: 70},
+    {name: "Shimmering Moon Fragment", eff: "+1 Star Remnant ทุกหีบที่เปิด", pts: 60},
+    {name: "Solar Cleaver", eff: "+100% physical crit chance", pts: 55},
+    {name: "Reaper Scythe", eff: "+75% damage ใส่บอส", pts: 50},
+    {name: "Magic Tome", eff: "+100% magic damage", pts: 50},
+    {name: "Glacial Axe", eff: "ศัตรูเดินช้าลง 30%", pts: 50},
+    {name: "Fish Hook", eff: "+20% โชคหีบ (luck)", pts: 45},
+    {name: "Speedy Boots", eff: "-20% attack cooldown", pts: 45},
+    {name: "Golden Branch", eff: "-15% ค่าวาง/อัปเกรด", pts: 40},
+    {name: "Elf Bow", eff: "+50% range", pts: 40},
+    {name: "Ninja Belt", eff: "-12% attack cooldown", pts: 35},
+    {name: "Sword", eff: "+30% attack", pts: 35},
+    {name: "Mage Coat", eff: "+50% magic damage", pts: 30},
+    {name: "Axe", eff: "+50% physical crit chance", pts: 30},
+    {name: "Nimble Cloak", eff: "-7% attack cooldown", pts: 25},
+    {name: "Bow", eff: "+20% range", pts: 25},
+    {name: "Dagger", eff: "+15% attack", pts: 20}
+]
 ; ready-made settings for room choice, curses, shrines and the shop
 global PRESETS := [
     {key: "beginner", th: "🟢 มือใหม่ (ปลอดภัยไว้ก่อน)",
@@ -272,8 +301,8 @@ BuildGui() {
     AddNum("ShopRich", "คะแนนห้องร้าน เหรียญเยอะ", 30, 109), AddNum("ShopRichCoins", "เหรียญเยอะ = เกิน", 400, 109)
     AddNum("ShopMid", "คะแนนห้องร้าน เหรียญกลาง", 30, 143), AddNum("ShopMidCoins", "เหรียญกลาง = เกิน", 400, 143)
     AddNum("ShopPoor", "คะแนนห้องร้าน เหรียญน้อย", 30, 177)
-    C.ilv := G.AddListView("x25 y215 w530 h290 -Multi Grid", ["ชื่อไอเทม", "คะแนน", "ซื้อเมื่อเหรียญเกิน"])
-    C.ilv.ModifyCol(1, 270), C.ilv.ModifyCol(2, 80), C.ilv.ModifyCol(3, 150)
+    C.ilv := G.AddListView("x25 y212 w530 h215 -Multi Grid", ["ชื่อไอเทม", "คะแนน", "เหรียญเกิน", "ผลของไอเทม"])
+    C.ilv.ModifyCol(1, 150), C.ilv.ModifyCol(2, 55), C.ilv.ModifyCol(3, 75), C.ilv.ModifyCol(4, 225)
     C.ilv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Items.Length) ? FillItem(Items[row]) : 0)
     G.AddText("x570 y215 w200", "ชื่อไอเทม (ตรงกับในเกม)")
     C.iname := G.AddEdit("x570 y237 w205")
@@ -287,6 +316,13 @@ BuildGui() {
     G.AddButton("x570 y415 w100", "ลบ").OnEvent("Click", (*) => ItemDelete())
     G.AddButton("x675 y415 w48", "▲").OnEvent("Click", (*) => ItemMove(-1))
     G.AddButton("x727 y415 w48", "▼").OnEvent("Click", (*) => ItemMove(1))
+    G.AddButton("x570 y450 w205", "⭐ ใช้รายการแนะนำ").OnEvent("Click", (*) => ItemsRecommended())
+    ; items the shop has shown (items_seen.txt, written by the macro)
+    G.AddText("x25 y437 w530", "ของที่มาโครเคยเห็นในร้าน  (คลิกแล้วกด '← ใช้ชื่อนี้' เพื่อเพิ่มเข้ารายการซื้อ)")
+    C.slv := G.AddListView("x25 y458 w530 h165 -Multi Grid", ["ชื่อ", "ผล", "ราคา", "ในรายการ"])
+    C.slv.ModifyCol(1, 140), C.slv.ModifyCol(2, 230), C.slv.ModifyCol(3, 55), C.slv.ModifyCol(4, 70)
+    G.AddButton("x570 y490 w205", "← ใช้ชื่อนี้").OnEvent("Click", (*) => SeenToItem())
+    G.AddButton("x570 y525 w205", "รีเฟรชรายการที่เห็น").OnEvent("Click", (*) => LoadSeen())
 
     ; ------------------------------------------- แท็บ 4: ราคา / ทั่วไป
     tab.UseTab(4)
@@ -802,12 +838,75 @@ ItemsString() {
     return t
 }
 
+ItemEffect(name) {
+    k := RegExReplace(StrLower(name), "[^a-z]")
+    for d in ITEMDB
+        if (RegExReplace(StrLower(d.name), "[^a-z]") = k)
+            return d.eff
+    for sv in Seen
+        if (RegExReplace(StrLower(sv.name), "[^a-z]") = k)
+            return sv.eff
+    return (k = "other") ? "ของที่ไม่อยู่ในรายการ" : ""
+}
+
 RefreshItems(sel := 0) {
     C.ilv.Delete()
     for it in Items
-        C.ilv.Add(, it.name, it.score, it.min > 0 ? it.min : "-")
+        C.ilv.Add(, it.name, it.score, it.min > 0 ? it.min : "-", ItemEffect(it.name))
     if (sel >= 1 && sel <= Items.Length)
         C.ilv.Modify(sel, "Select Focus Vis")
+}
+
+; replace the buy list with the recommended one (all known items)
+ItemsRecommended() {
+    global Items, Dirty
+    if (MsgBox("แทนที่รายการซื้อด้วยรายการแนะนำ (" ITEMDB.Length " ชิ้น)?", "AA Dungeon", "YesNo Icon?") != "Yes")
+        return
+    Items := []
+    for d in ITEMDB
+        Items.Push({name: d.name, score: d.pts, min: 0})
+    Items.Push({name: "Other", score: 20, min: 1000})
+    Dirty := true
+    RefreshItems(1)
+    RefreshSeen()
+}
+
+LoadSeen() {
+    global Seen
+    Seen := []
+    f := A_ScriptDir "\items_seen.txt"
+    if FileExist(f)
+        for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r") {
+            p := StrSplit(ln, "|")
+            if (p.Length >= 1 && Trim(p[1]) != "")
+                Seen.Push({name: Trim(p[1]), eff: p.Length >= 2 ? Trim(p[2]) : "", price: p.Length >= 3 ? p[3] : ""})
+        }
+    RefreshSeen()
+}
+RefreshSeen() {
+    C.slv.Delete()
+    for sv in Seen {
+        inList := "-"
+        k := RegExReplace(StrLower(sv.name), "[^a-z]")
+        for it in Items
+            if (RegExReplace(StrLower(it.name), "[^a-z]") = k)
+                inList := "✔ " it.score
+        C.slv.Add(, sv.name, sv.eff, sv.price, inList)
+    }
+}
+SeenToItem() {
+    if !(row := C.slv.GetNext()) {
+        MsgBox("คลิกเลือกของในรายการที่เห็นก่อน", "AA Dungeon", "Icon!")
+        return
+    }
+    sv := Seen[row]
+    C.iname.Value := sv.name
+    pts := 30
+    for d in ITEMDB
+        if (RegExReplace(StrLower(d.name), "[^a-z]") = RegExReplace(StrLower(sv.name), "[^a-z]"))
+            pts := d.pts
+    C.iscore.Value := pts, C.imin.Value := 0
+    C.status.Text := "ใส่ชื่อ " sv.name " แล้ว - ปรับคะแนนแล้วกด '+ เพิ่ม'"
 }
 
 FillItem(it) {
@@ -887,6 +986,7 @@ LoadSettings() {
     }
     Filling := false
     RefreshItems()
+    LoadSeen()
     RefreshNames()
 }
 
