@@ -6,6 +6,8 @@
 ;  โดยไม่ต้องเปิดไฟล์เอง  เปิดได้จากไฟล์นี้ หรือกด F8 ตอนมาโครเปิดอยู่
 ; =====================================================================
 SetWorkingDir A_ScriptDir
+CoordMode "Mouse", "Screen"
+CoordMode "ToolTip", "Screen"
 #Include %A_ScriptDir%\Lib\OCR.ahk          ; only to check OCR languages in bug reports
 
 global PLANFILE := A_ScriptDir "\plan.txt"
@@ -34,13 +36,13 @@ global DEF := Map(
 
 global EXAMPLE_PLAN := "
 (
-place 1 x3
-place 2 x1
-place 3 x1
-place 4 x1
-place 5 x1
+place 1 x3 far
+place 2 x1 far
+place 3 x1 cover
+place 4 x1 near
+place 5 x1 group
 upgrade 1,2 max even until wave 5
-place 5 x1
+place 5 x1 group
 upgrade 1,2 max even
 upgrade 3 to 3
 ability 3 x2
@@ -51,12 +53,18 @@ auto 6
 upgrade 3 max
 ability 3 x2
 upgrade 5 max one
-place 6 x3
+place 6 x3 spread
 upgrade 6 max one
 upgrade all max
 )"
 
 global KINDS := ["place", "upgrade", "ability", "auto", "wait", "wave"]
+global PLACE_KEYS := ["random", "near", "far", "group", "spread", "cover", "center", "at"]
+global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่มต้น)", "ชิดทางเดิน", "ไกลทางเดิน (ตัวฟาร์ม)", "รวมกลุ่มติดกัน",
+    "กระจายห่างกัน", "จุดที่ทางผ่านเยอะ (โค้ง)", "กลางจอ", "กำหนดจุดเอง"]
+global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
+    "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
+global PickResult := ""
 global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ"]
 
 global Steps := []          ; ขั้นตอนของแผน
@@ -77,16 +85,16 @@ LoadSettings()
 if Steps.Length
     FillBuilder(Steps[1])
 Dirty := false
-G.Show("w800 h610")
+G.Show("w800 h650")
 return
 
 ; ============================================================== GUI
 BuildGui() {
     global G
-    G := Gui("+MinSize800x610", "AA Dungeon - ตั้งค่ามาโคร")
+    G := Gui("+MinSize800x650", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
-    tab := G.AddTab3("x10 y10 w780 h545", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ราคายูนิต / ทั่วไป"])
+    tab := G.AddTab3("x10 y10 w780 h585", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ราคายูนิต / ทั่วไป"])
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
@@ -101,7 +109,7 @@ BuildGui() {
     G.AddButton("x515 y292 w120", "ใช้แผนตัวอย่าง").OnEvent("Click", (*) => LoadExample())
     G.AddButton("x640 y292 w135", "ล้างแผนทั้งหมด").OnEvent("Click", (*) => ClearPlan())
 
-    G.AddGroupBox("x25 y325 w750 h220", "สร้าง / แก้ขั้นตอน  (คลิกแถวด้านบนเพื่อแก้แถวนั้น)")
+    G.AddGroupBox("x25 y325 w750 h260", "สร้าง / แก้ขั้นตอน  (คลิกแถวด้านบนเพื่อแก้แถวนั้น)")
     G.AddText("x40 y352 w60", "คำสั่ง")
     C.act := G.AddDropDownList("x105 y348 w170 Choose1", KIND_TH)
     C.act.OnEvent("Change", (*) => UpdateBuilder())
@@ -140,12 +148,23 @@ BuildGui() {
     C.note := G.AddEdit("x365 y420 w325")
     C.note.OnEvent("Change", (*) => UpdateBuilder())
 
-    G.AddText("x40 y458 w60", "จะได้")
-    C.preview := G.AddText("x105 y458 w590 cBlue", "")
+    G.AddText("x40 y460 w60", "ท่าวาง")
+    C.pstyle := G.AddDropDownList("x105 y456 w230 Choose1", PLACE_TH)
+    C.pstyle.OnEvent("Change", (*) => UpdateBuilder())
+    C.atLabel := G.AddText("x350 y460 w50", "จุด X,Y")
+    C.atX := G.AddEdit("x405 y456 w55 Number", 960)
+    C.atX.OnEvent("Change", (*) => UpdateBuilder())
+    C.atY := G.AddEdit("x465 y456 w55 Number", 540)
+    C.atY.OnEvent("Change", (*) => UpdateBuilder())
+    C.pick := G.AddButton("x530 y454 w160", "🎯 เลือกจุดบนจอเกม")
+    C.pick.OnEvent("Click", (*) => PickSpot())
 
-    G.AddButton("x40 y490 w150 h35 Default", "+ เพิ่มต่อท้าย").OnEvent("Click", (*) => AddStep("end"))
-    G.AddButton("x200 y490 w175 h35", "+ แทรกก่อนแถวที่เลือก").OnEvent("Click", (*) => AddStep("before"))
-    G.AddButton("x385 y490 w175 h35", "✎ แก้แถวที่เลือก").OnEvent("Click", (*) => AddStep("replace"))
+    G.AddText("x40 y496 w60", "จะได้")
+    C.preview := G.AddText("x105 y496 w665 cBlue", "")
+
+    G.AddButton("x40 y530 w150 h35 Default", "+ เพิ่มต่อท้าย").OnEvent("Click", (*) => AddStep("end"))
+    G.AddButton("x200 y530 w175 h35", "+ แทรกก่อนแถวที่เลือก").OnEvent("Click", (*) => AddStep("before"))
+    G.AddButton("x385 y530 w175 h35", "✎ แก้แถวที่เลือก").OnEvent("Click", (*) => AddStep("replace"))
 
     ; ---------------------------------------------- แท็บ 2: เลือกห้อง
     tab.UseTab(2)
@@ -211,10 +230,10 @@ BuildGui() {
 
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
-    G.AddButton("x10 y565 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
-    G.AddButton("x140 y565 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
-    G.AddButton("x370 y565 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
-    C.status := G.AddText("x530 y574 w260 cGreen", "")
+    G.AddButton("x10 y605 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
+    G.AddButton("x140 y605 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
+    G.AddButton("x370 y605 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
+    C.status := G.AddText("x530 y614 w260 cGreen", "")
     UpdateBuilder()
 }
 
@@ -234,16 +253,23 @@ MarkDirty() {
 
 ; ============================================================ plan
 NewStep(k) {
-    return {k: k, slots: [], all: false, n: 1, goal: "max", gv: 1, style: "one", until: 0, note: ""}
+    return {k: k, slots: [], all: false, n: 1, goal: "max", gv: 1, style: "one", until: 0, note: "",
+        place: "random", ax: 960, ay: 540}
 }
 
 ParseStep(line) {
     l := StrLower(Trim(line))
     for th, en in Map("วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto",
-        "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one")
+        "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one",
+        "สุ่ม", "random", "ชิดทาง", "near", "ไกล", "far", "กลุ่ม", "group", "กระจาย", "spread", "โค้ง", "cover",
+        "กลาง", "center", "จุด", "at")
         l := StrReplace(l, th, en)
-    if RegExMatch(l, "^place\s+([1-6])\s*(?:x\s*(\d+))?$", &m) {
+    if RegExMatch(l, "^place\s+([1-6])\s*(?:x\s*(\d+))?(?:\s+(random|near|far|group|spread|cover|center|at\s*(\d+)\s*,\s*(\d+)))?$", &m) {
         s := NewStep("place"), s.slots := [Integer(m[1])], s.n := m[2] != "" ? Integer(m[2]) : 1
+        if (m[3] != "")
+            s.place := (SubStr(m[3], 1, 2) = "at") ? "at" : m[3]
+        if (s.place = "at")
+            s.ax := Integer(m[4]), s.ay := Integer(m[5])
         return s
     }
     if RegExMatch(l, "^upgrade\s+(all|[1-6](?:\s*,\s*[1-6])*)(.*)$", &m) {
@@ -292,7 +318,13 @@ JoinSlots(arr) {
 
 StepCmd(s) {
     switch s.k {
-        case "place":   return "place " s.slots[1] " x" s.n
+        case "place":
+            t := "place " s.slots[1] " x" s.n
+            if (s.place = "at")
+                t .= " at " s.ax "," s.ay
+            else if (s.place != "random")
+                t .= " " s.place
+            return t
         case "ability": return "ability " s.slots[1] " x" s.n
         case "auto":    return "auto " s.slots[1]
         case "wait":    return "wait " s.n
@@ -310,7 +342,13 @@ StepCmd(s) {
 
 StepDesc(s) {
     switch s.k {
-        case "place":   return "วางยูนิตช่อง " s.slots[1] " จำนวน " s.n " ตัว"
+        case "place":
+            t := "วางยูนิตช่อง " s.slots[1] " จำนวน " s.n " ตัว"
+            if (s.place = "at")
+                t .= " ที่จุด (" s.ax ", " s.ay ")"
+            else if PLACE_DESC.Has(s.place)
+                t .= " แบบ" PLACE_DESC[s.place]
+            return t
         case "ability": return "กดสกิลยูนิตช่อง " s.slots[1] " จำนวน " s.n " ครั้ง"
         case "auto":    return "เปิดสกิล Auto ยูนิตช่อง " s.slots[1]
         case "wait":    return "รอ " s.n " วินาที"
@@ -427,6 +465,16 @@ BuilderStep(&why := "") {
         }
         s.n := Integer(n)
     }
+    if (k = "place") {
+        s.place := PLACE_KEYS[C.pstyle.Value]
+        if (s.place = "at") {
+            if !(IsInteger(C.atX.Value) && IsInteger(C.atY.Value) && C.atX.Value <= 1920 && C.atY.Value <= 1080) {
+                why := "ใส่จุด X (0-1920) และ Y (0-1080) หรือกด 'เลือกจุดบนจอเกม'"
+                return ""
+            }
+            s.ax := Integer(C.atX.Value), s.ay := Integer(C.atY.Value)
+        }
+    }
     s.note := Trim(StrReplace(StrReplace(C.note.Value, "`n", " "), ";", ","))
     return s
 }
@@ -444,6 +492,9 @@ UpdateBuilder() {
     C.goal.Enabled := isUp, C.style.Enabled := isUp, C.untilCb.Enabled := isUp
     C.gv.Enabled := isUp && C.goal.Value != 1
     C.untilW.Enabled := isUp && C.untilCb.Value
+    isPl := (k = "place"), isAt := isPl && PLACE_KEYS[C.pstyle.Value] = "at"
+    C.pstyle.Enabled := isPl
+    C.atX.Enabled := isAt, C.atY.Enabled := isAt, C.pick.Enabled := isAt
     s := BuilderStep(&why)
     C.preview.Text := IsObject(s) ? StepDesc(s) "     →  " StepCmd(s) : "(ยังไม่ครบ: " why ")"
 }
@@ -467,6 +518,8 @@ FillBuilder(s) {
     if s.until
         C.untilW.Value := s.until
     C.note.Value := s.note
+    C.pstyle.Value := ArrIndex(PLACE_KEYS, s.place)
+    C.atX.Value := s.ax, C.atY.Value := s.ay
     Filling := false
     UpdateBuilder()
 }
@@ -547,6 +600,52 @@ SavePlan() {
     f := FileOpen(PLANFILE, "w", "UTF-8")
     f.Write(t)
     f.Close()
+}
+
+; ---- pick a spot on the game screen (for "กำหนดจุดเอง")
+; The click is caught here and does not reach the game.
+PickSpot() {
+    global PickResult
+    rb := "ahk_exe RobloxPlayerBeta.exe"
+    if !WinExist(rb) {
+        MsgBox("เปิด Roblox ก่อน (แนะนำให้อยู่ในด่าน จะเห็นตำแหน่งจริง)", "AA Dungeon", "Icon!")
+        return
+    }
+    G.Hide()
+    WinActivate(rb)
+    PickResult := ""
+    Hotkey("*LButton", PickClick, "On")
+    Hotkey("*Esc", PickCancel, "On")
+    while (!IsObject(PickResult) && PickResult = "") {
+        MouseGetPos(&mx, &my)
+        ToolTip("คลิกตรงจุดที่จะให้วางยูนิต  (Esc = ยกเลิก)", mx + 18, my + 18)
+        Sleep 30
+    }
+    Hotkey("*LButton", "Off"), Hotkey("*Esc", "Off")
+    ToolTip()
+    G.Show()
+    if !IsObject(PickResult)
+        return
+    ; screen pixel -> the macro's 1920x1080 coordinates (Roblox window centre based)
+    WinGetClientPos(&cx, &cy, &cw, &ch, rb)
+    u := ch / 1080
+    rx := Round((PickResult.x - (cx + cw / 2)) / u + 960)
+    ry := Round((PickResult.y - (cy + ch / 2)) / u + 540)
+    if (rx < 0 || ry < 0 || rx > 1920 || ry > 1080) {
+        MsgBox("จุดที่คลิกอยู่นอกหน้าต่าง Roblox", "AA Dungeon", "Icon!")
+        return
+    }
+    C.atX.Value := rx, C.atY.Value := ry
+    UpdateBuilder()
+}
+PickClick(*) {
+    global PickResult
+    MouseGetPos(&x, &y)
+    PickResult := {x: x, y: y}
+}
+PickCancel(*) {
+    global PickResult
+    PickResult := "cancel"
 }
 
 ; ============================================================ shop items

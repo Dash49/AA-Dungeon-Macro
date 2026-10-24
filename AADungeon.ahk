@@ -1152,10 +1152,17 @@ LoadPlan() {
         if (line = "")
             continue
         l := StrLower(line)
-        for th, en in Map("วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto", "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one")
+        for th, en in Map("วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto", "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one",
+            "สุ่ม", "random", "ชิดทาง", "near", "ไกล", "far", "กลุ่ม", "group", "กระจาย", "spread", "โค้ง", "cover", "กลาง", "center", "จุด", "at")
             l := StrReplace(l, th, en)
-        if RegExMatch(l, "^place\s+([1-6])\s*(?:x\s*(\d+))?$", &m)
-            steps.Push({k: "place", slot: Integer(m[1]), n: m[2] != "" ? Integer(m[2]) : 1, text: line})
+        if RegExMatch(l, "^place\s+([1-6])\s*(?:x\s*(\d+))?(?:\s+(random|near|far|group|spread|cover|center|at\s*(\d+)\s*,\s*(\d+)))?$", &m) {
+            st := {k: "place", slot: Integer(m[1]), n: m[2] != "" ? Integer(m[2]) : 1, style: "random", text: line}
+            if (m[3] != "")
+                st.style := (SubStr(m[3], 1, 2) = "at") ? "at" : m[3]
+            if (st.style = "at")
+                st.ax := Integer(m[4]), st.ay := Integer(m[5])
+            steps.Push(st)
+        }
         else if RegExMatch(l, "^upgrade\s+(all|[1-6](?:\s*,\s*[1-6])*)(.*)$", &m) {
             st := {k: "upgrade", targets: [], goal: "max", plus: 0, style: "one", until: 0, text: line}
             if (m[1] = "all") {
@@ -1296,7 +1303,8 @@ RunStep(st) {
                 }
                 if !WaitYen(CFG["Cost" st.slot], 60000)
                     return MatchOver() ? "end" : ""
-                r := PlaceUnit(st.slot)
+                r := PlaceUnit(st.slot, st.HasOwnProp("style") ? st.style : "random",
+                    (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : ""))
                 if (r = "ok")
                     done++, t0 := A_TickCount
                 else if (A_TickCount - t0 > 60000) {
@@ -1410,7 +1418,118 @@ AddCand(cands, cells, x, y, gap, maxN) {
     return true
 }
 
-PlaceUnit(slot) {
+; Placing styles (plan.txt: place 1 x3 far / place 3 x2 at 900,500 ...)
+;   random  a random spot 30-120 px off the path (default)
+;   near    as close to the path as the game allows
+;   far     as far from the path as possible (farm units)
+;   group   next to this unit's first copy / the last "group" unit
+;   spread  as far from the other units as possible, still near the path
+;   cover   where the path passes most (curves, corners)
+;   center  nearest to the middle of the screen
+;   at X,Y  at a fixed spot (1920x1080 screen pixels), the nearest free one
+PlaceCands(style, pt0, slot, path, cells, gap, tinted) {
+    ps := [], stp := Max(1, path.Length // 300), i := 1
+    while (i <= path.Length)
+        ps.Push(path[i]), i += stp
+    pool := []
+    if (style = "at" && IsObject(pt0)) {
+        for rr in [0, 22, 40, 60, 85, 115, 150, 190] {
+            nA := (rr = 0) ? 1 : Round(rr / 6)
+            Loop nA {
+                a := 6.2832 * A_Index / nA + Random(0.0, 0.3)
+                AddCand(pool, cells, pt0.x + Cos(a) * rr, pt0.y + Sin(a) * rr * 0.85, 10, 300)
+            }
+        }
+    } else {
+        for gd in MT.good                            ; ground that already worked
+            Loop 6 {
+                a := Random(0.0, 6.2832), d := Random(34.0, 85.0)
+                if AddCand(pool, cells, gd.x + Cos(a) * d, gd.y + Sin(a) * d * 0.85, gap, 300)
+                    pool[pool.Length].g := true
+            }
+        anc := (style = "group") ? GroupAnchor(slot) : ""
+        if IsObject(anc)
+            Loop 250 {
+                a := Random(0.0, 6.2832), d := Random(32.0, 80.0)
+                AddCand(pool, cells, anc.x + Cos(a) * d, anc.y + Sin(a) * d * 0.85, gap, 300)
+            }
+        dMin := (style = "near") ? 22.0 : 30.0, dMax := (style = "near") ? 60.0 : 120.0
+        target := (style = "random") ? 45 : 110      ; random needs no ranking
+        if (!tinted && style != "far") {
+            n := 0
+            Loop 600 {
+                if (++n > target)
+                    break
+                p := path[Random(1, path.Length)]
+                a := Random(0.0, 6.2832), d := Random(dMin, dMax)
+                if !AddCand(pool, cells, p[1] + Cos(a) * d, p[2] + Sin(a) * d * 0.85, gap, 300)
+                    n--
+            }
+        }
+        if (style = "far" || pool.Length < 12) {     ; anywhere on the map
+            n := 0
+            Loop 1500 {
+                if (n >= target)
+                    break
+                if AddCand(pool, cells, Random(150.0, 1760.0), Random(180.0, 890.0), gap, 300)
+                    n++
+            }
+        }
+    }
+    ; best spots first
+    for c in pool {
+        switch style {
+            case "near":   c.s := -MinDist(ps, c.x, c.y)
+            case "far":    c.s := Min(MinDist(ps, c.x, c.y), 450)
+            case "cover":  c.s := CountNear(ps, c.x, c.y, 170)
+            case "spread": c.s := MinUnitDist(c.x, c.y) + CountNear(ps, c.x, c.y, 150) * 0.3
+            case "center": c.s := -Sqrt((c.x - 960) ** 2 + (c.y - 540) ** 2)
+            case "at":     c.s := -Sqrt((c.x - pt0.x) ** 2 + (c.y - pt0.y) ** 2)
+            case "group":
+                c.s := IsObject(anc) ? -Sqrt((c.x - anc.x) ** 2 + (c.y - anc.y) ** 2) : CountNear(ps, c.x, c.y, 170)
+            default:       c.s := Random(0.0, 1.0) + (c.HasOwnProp("g") ? 1 : 0)
+        }
+    }
+    sorted := []
+    for c in pool {
+        i := sorted.Length + 1
+        while (i > 1 && sorted[i - 1].s < c.s)
+            i--
+        sorted.InsertAt(i, c)
+    }
+    if (sorted.Length > 40)
+        sorted.RemoveAt(41, sorted.Length - 40)
+    return sorted
+}
+MinDist(ps, x, y) {
+    best := 999999
+    for p in ps {
+        d := (p[1] - x) ** 2 + (p[2] - y) ** 2
+        if (d < best)
+            best := d
+    }
+    return Sqrt(best)
+}
+CountNear(ps, x, y, r) {
+    n := 0, r2 := r * r
+    for p in ps
+        n += ((p[1] - x) ** 2 + (p[2] - y) ** 2 <= r2)
+    return n
+}
+MinUnitDist(x, y) {
+    best := 1000
+    for v in MT.units
+        best := Min(best, Sqrt((v.x - x) ** 2 + (v.y - y) ** 2))
+    return best
+}
+GroupAnchor(slot) {
+    for v in MT.units
+        if (v.slot = slot)
+            return {x: v.x, y: v.y}
+    return MT.HasOwnProp("lastGroup") ? MT.lastGroup : ""
+}
+
+PlaceUnit(slot, style := "random", pt0 := "") {
     Focus()
     ; Unit Overview stays open on the right: its cards prove a placement
     ; at once, and no time is lost opening/closing it. Spots under it are
@@ -1419,7 +1538,8 @@ PlaceUnit(slot) {
     n0 := -1
     if !MT.HasOwnProp("streak")
         MT.streak := 0
-    wide := (MT.streak >= 1 || MT.HasOwnProp("wideMode"))  ; panel side failed once:
+    wide := (MT.streak >= 1 || MT.HasOwnProp("wideMode")   ; panel side failed once,
+        || (style = "at" && IsObject(pt0) && pt0.x > 1180))    ; or the spot is under it:
     if wide                                        ; use the whole map, check by yen
         CloseOverview()
     else if (MT.units.Length < 8) {
@@ -1465,33 +1585,7 @@ PlaceUnit(slot) {
     }
     if !MT.HasOwnProp("good")
         MT.good := []
-    cands := []
-    ; 1) next to spots that already worked in this match (same ground)
-    for gd in MT.good {
-        Loop 8 {
-            a := Random(0.0, 6.2832), d := Random(34.0, 85.0)
-            AddCand(cands, cells, gd.x + Cos(a) * d, gd.y + Sin(a) * d * 0.85, gap, 14)
-        }
-    }
-    ; 2) random spots 30..120 px off a random path point
-    if !tinted {
-        Loop 400 {
-            if (cands.Length >= 40)
-                break
-            pt := path[Random(1, path.Length)]
-            a := Random(0.0, 6.2832), d := Random(30.0, 120.0)
-            AddCand(cands, cells, pt[1] + Cos(a) * d, pt[2] + Sin(a) * d * 0.85, gap, 40)
-        }
-    }
-    ; 3) anywhere on the map that is not red (tinted maps, or the path
-    ;    spots all failed already)
-    if (cands.Length < 12) {
-        Loop 1500 {
-            if (cands.Length >= 40)
-                break
-            AddCand(cands, cells, Random(150.0, 1760.0), Random(180.0, 890.0), gap, 40)
-        }
-    }
+    cands := PlaceCands(style, pt0, slot, path, cells, gap, tinted)
     if (cands.Length = 0 && MT.bad.Length) {
         MT.bad := []
         Out("  every spot failed once - trying them again")
@@ -1566,7 +1660,10 @@ PlaceUnit(slot) {
                 n += (v.slot = slot) ? 1 : 0
             MT.units.Push({slot: slot, n: n, x: c.x, y: c.y, lvl: 0, maxed: false})
             MT.good.Push({x: c.x, y: c.y})
-            Out("  placed unit " slot " #" n " at " Round(c.x) "," Round(c.y) " (try " fails + 1 ")")
+            if (style = "group" && !MT.HasOwnProp("lastGroup"))
+                MT.lastGroup := {x: c.x, y: c.y}
+            Out("  placed unit " slot " #" n " at " Round(c.x) "," Round(c.y) " (try " fails + 1
+                . (style != "random" ? ", " style : "") ")")
             return "ok"
         }
         MT.bad.Push(c)
