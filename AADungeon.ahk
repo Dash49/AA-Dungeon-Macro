@@ -352,7 +352,11 @@ Screen(&r := "") {
         return "leave"
     if (InStr(t, "Died") && InStr(t, "Depth Reached"))
         return "died"
-    if (InStr(t, "OPEN CHESTS") || (InStr(t, "Luck") && InStr(t, "Continue")))
+    ; the shop first: a shop item can say "Luck", which also shows on the
+    ; chest screen - that once made the macro skip a whole shop
+    if (InStr(t, "Spend coins") || (RegExMatch(t, "\bSHOP\b") && InStr(t, "Continue") && !InStr(t, "OPEN CHESTS")))
+        return "shop"
+    if (InStr(t, "OPEN CHESTS") || (InStr(t, "Luck") && InStr(t, "Continue") && !InStr(t, "Spend")))
         return "chests"
     if (InStr(t, "WILL RECEIVE") || InStr(t, "shrine's") || (InStr(t, "ACCEPT") && InStr(t, "DENY")))
         return "shrine"
