@@ -39,6 +39,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   or, in "wide" mode with the overview closed, the yen dropped. After 3 failed card checks
   for a slot it trusts the red path (`MT.fake`).
   Hill units with no green on screen walk W/D/S/A (`HillWalk` s) and always walk back.
+- Card ↔ slot: if `Name<slot>` is set, `CardOf()` → `CardByName()` OCRs the names under the portraits
+  (`CardNames`, cached 3 s) and matches them (`NameMatch`, fuzzy). Without a name it guesses from card order
+  (slot high→low), which is often wrong – the game does not always sort that way.
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
   `OverviewScroll` scrolls one notch at a time – an extra wheel notch at the list end zooms the
   camera into first person (a classic bug). `FixFirstPerson()` repairs that.

@@ -30,6 +30,7 @@ global DEF := Map(
     "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
     "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
+    "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
         . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
@@ -67,6 +68,7 @@ global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่ม
 global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
+global SlotNames := ["", "", "", "", "", ""]     ; unit names per hotbar slot (Name1..Name6)
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
 global UPDATE_FILES := ["AADungeon.ahk", "AASettings.ahk", "Lib/OCR.ahk"]
@@ -103,7 +105,7 @@ BuildGui() {
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
-    G.AddText("x25 y45 w750 cGray", "มาโครจะทำทีละขั้นจากบนลงล่างในทุกห้อง  (ช่อง 1-6 = ช่อง hotbar ของยูนิต)")
+    C.legend := G.AddText("x25 y45 w750 cGray", "มาโครจะทำทีละขั้นจากบนลงล่างในทุกห้อง  (ช่อง 1-6 = ช่อง hotbar ของยูนิต)")
     C.lv := G.AddListView("x25 y70 w750 h215 -Multi Grid", ["#", "ขั้นตอน", "คำสั่งใน plan.txt", "หมายเหตุ"])
     C.lv.ModifyCol(1, 35), C.lv.ModifyCol(2, 330), C.lv.ModifyCol(3, 210), C.lv.ModifyCol(4, 170)
     C.lv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Steps.Length) ? FillBuilder(Steps[row]) : 0)
@@ -222,13 +224,20 @@ BuildGui() {
 
     ; ------------------------------------------- แท็บ 4: ราคา / ทั่วไป
     tab.UseTab(4)
-    G.AddText("x25 y45 w750 cGray", "ราคาวาง: ใช้เมื่ออ่านราคาจาก hotbar ไม่ได้     ประเภท: ยูนิตเนิน (hill) วางได้แค่บนโซนสีเขียว")
-    C.type := []
+    G.AddText("x25 y45 w750 cGray", "ชื่อยูนิต: พิมพ์ให้ตรงกับชื่อใต้รูปใน Unit Overview (เช่น C.E.O., Idol) มาโครจะหาการ์ดอัปเกรดจากชื่อนี้")
+    C.type := [], C.name := []
     Loop 6 {
         yy := 75 + (A_Index - 1) * 34
-        AddNum("Cost" A_Index, "ราคาวาง ช่อง " A_Index, 30, yy, "¥")
-        G.AddText("x420 y" (yy + 4) " w60", "ประเภท")
-        dd := G.AddDropDownList("x485 y" yy " w200 Choose1", ["พื้นดิน (ground)", "เนิน (hill)"])
+        G.AddText("x30 y" (yy + 4) " w55", "ช่อง " A_Index)
+        ne := G.AddEdit("x90 y" yy " w200")
+        ne.OnEvent("Change", (*) => (MarkDirty(), RefreshNames()))
+        C.name.Push(ne)
+        G.AddText("x305 y" (yy + 4) " w40", "ราคา")
+        E["Cost" A_Index] := G.AddEdit("x345 y" yy " w75")
+        E["Cost" A_Index].OnEvent("Change", (*) => MarkDirty())
+        G.AddText("x425 y" (yy + 4) " w15 cGray", "¥")
+        G.AddText("x450 y" (yy + 4) " w55", "ประเภท")
+        dd := G.AddDropDownList("x510 y" yy " w180 Choose1", ["พื้นดิน (ground)", "เนิน (hill)"])
         dd.OnEvent("Change", (*) => MarkDirty())
         C.type.Push(dd)
     }
@@ -359,21 +368,43 @@ StepCmd(s) {
     return ""
 }
 
+SlotLabel(i) => (SlotNames[i] != "") ? SlotNames[i] " (ช่อง " i ")" : "ยูนิตช่อง " i
+SlotList(arr) {
+    t := ""
+    for v in arr
+        t .= (t = "" ? "" : ", ") SlotLabel(v)
+    return t
+}
+; names typed in the unit tab -> legend, step texts, slot check boxes
+RefreshNames() {
+    leg := ""
+    for i, ne in C.name {
+        SlotNames[i] := Trim(ne.Value)
+        if (SlotNames[i] != "")
+            leg .= "   " i "=" SlotNames[i]
+    }
+    C.legend.Text := (leg = "") ? "มาโครจะทำทีละขั้นจากบนลงล่างในทุกห้อง  (ช่อง 1-6 = ช่อง hotbar ของยูนิต  ตั้งชื่อยูนิตได้ในแท็บ ยูนิต / ทั่วไป)"
+        : "ช่อง hotbar:" leg
+    row := C.lv.GetNext()
+    RefreshPlan(row)
+    UpdateBuilder()
+}
+
 StepDesc(s) {
     switch s.k {
         case "place":
-            t := "วางยูนิตช่อง " s.slots[1] " จำนวน " s.n " ตัว"
+            t := "วาง " SlotLabel(s.slots[1]) " จำนวน " s.n " ตัว"
             if (s.place = "at")
                 t .= " ที่จุด (" s.ax ", " s.ay ")"
             else if PLACE_DESC.Has(s.place)
                 t .= " แบบ" PLACE_DESC[s.place]
             return t
-        case "ability": return "กดสกิลยูนิตช่อง " s.slots[1] " จำนวน " s.n " ครั้ง"
-        case "auto":    return "เปิดสกิล Auto ยูนิตช่อง " s.slots[1]
+        case "ability": return "กดสกิล " SlotLabel(s.slots[1]) " จำนวน " s.n " ครั้ง"
+        case "auto":    return "เปิดสกิล Auto " SlotLabel(s.slots[1])
         case "wait":    return "รอ " s.n " วินาที"
         case "wave":    return "รอจนถึงเวฟ " s.n
         case "upgrade":
-            t := "อัปเกรด" (s.all ? "ทุกตัว" : "ช่อง " JoinSlots(s.slots))
+            t := "อัปเกรด " (s.all ? "ทุกตัว" : SlotList(s.slots))
             t .= (s.goal = "max") ? " ให้ตัน" : (s.goal = "to") ? " ถึงเลเวล " s.gv : " เพิ่มอีก " s.gv " ขั้น"
             if (s.style = "even" && (s.all || s.slots.Length > 1))
                 t .= " (สลับกันให้เท่าๆ กัน)"
@@ -761,11 +792,14 @@ LoadSettings() {
             C.run.Value := (val + 0) ? 1 : 0
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
+        else if (SubStr(k, 1, 4) = "Name")
+            C.name[Integer(SubStr(k, 5))].Value := val
         else if (SubStr(k, 1, 4) = "Type")
             C.type[Integer(SubStr(k, 5))].Value := (StrLower(val) = "hill") ? 2 : 1
     }
     Filling := false
     RefreshItems()
+    RefreshNames()
 }
 
 SaveAll(restart) {
@@ -787,6 +821,8 @@ SaveAll(restart) {
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)
+        for i, ne in C.name
+            IniWrite(Trim(StrReplace(ne.Value, "|", "")), INI, "Settings", "Name" i)
         SavePlan()
     } catch as err {
         MsgBox("บันทึกไม่สำเร็จ: " err.Message, "AA Dungeon", "Icon!")

@@ -89,6 +89,7 @@ LoadConfig() {
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
+        "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=80|Golden Fishhook=75"
             . "|Archmage's Hat=65 >500|Aures Maul=65 >500|Solar Cleaver=60 >500|Magic Tome=50 >500|Mage Coat=35 >500|Elf Bow=35 >500"
@@ -2155,6 +2156,8 @@ CardLevel(c) {
 ; mouse is over the list. A wheel over the map zooms the camera, and
 ; WheelUp there goes all the way into first person (mouse gets locked).
 OverviewScroll(dir) {
+    if IsObject(MT)
+        MT.ncAt := 0                               ; card names moved: read them again
     ; The list only eats the wheel while it CAN scroll. At its top a WheelUp
     ; goes to the camera instead (zoom in -> first person). So: tiny steps,
     ; look after each one, stop at the end of the list.
@@ -2243,7 +2246,106 @@ ZoomOutKeys(n := 15) {
     }
 }
 
+; Card names (bottom of the portrait, e.g. "Idol (Star)") tell which card
+; belongs to which hotbar slot when the slot has a name in settings
+; (Name1..Name6). One OCR of the panel, kept for 3 s.
+CardNames(cards) {
+    if (MT.HasOwnProp("ncAt") && A_TickCount - MT.ncAt < 3000 && MT.ncN = cards.Length
+        && cards.Length && MT.ncY = cards[1].y)
+        return MT.ncNames
+    names := []
+    u := WIN.u
+    ws := cards.Length ? Words(OcrRect(PX(1290, "r"), PY(190), PX(1870, "r"), PY(945), 3)) : []
+    for c in cards {
+        parts := []
+        for w in ws
+            if (w.x >= c.x - 175 * u && w.x <= c.x - 50 * u && w.y >= c.y + 44 * u && w.y <= c.y + 78 * u) {
+                i := parts.Length + 1
+                while (i > 1 && parts[i - 1].x > w.x)
+                    i--
+                parts.InsertAt(i, w)
+            }
+        t := ""
+        for p in parts
+            t .= p.t " "
+        names.Push(Trim(t))
+    }
+    MT.ncAt := A_TickCount, MT.ncN := cards.Length, MT.ncY := cards.Length ? cards[1].y : 0, MT.ncNames := names
+    return names
+}
+NormName(t) => RegExReplace(StrLower(t), "[^a-z0-9]")
+NameMatch(ocrText, name) {
+    a := NormName(ocrText), b := NormName(name)
+    if (StrLen(a) < 2 || StrLen(b) < 2)
+        return false
+    if (InStr(a, b) || (StrLen(a) >= 3 && InStr(b, a)))
+        return true
+    return Lev(SubStr(a, 1, StrLen(b)), b) <= Max(1, StrLen(b) // 4)
+}
+Lev(a, b) {
+    la := StrLen(a), lb := StrLen(b)
+    if !la
+        return lb
+    prev := []
+    Loop lb + 1
+        prev.Push(A_Index - 1)
+    Loop la {
+        i := A_Index, cur := [i], ca := SubStr(a, i, 1)
+        Loop lb {
+            j := A_Index
+            cost := (ca = SubStr(b, j, 1)) ? 0 : 1
+            cur.Push(Min(prev[j + 1] + 1, cur[j] + 1, prev[j] + cost))
+        }
+        prev := cur
+    }
+    return prev[lb + 1]
+}
+; the card of unit u found by its slot's name -> card or ""
+CardByName(u, nm) {
+    k := 0, total := 0                             ; u is copy k of total
+    for v in MT.units
+        if (v.slot = u.slot) {
+            total++
+            if (v = u)
+                k := total
+        }
+    Loop 3 {                                       ; visible part, scrolled down, back up
+        r := (A_Index = 1) ? OverviewOpen() : OverviewRead()
+        if !r.open
+            return ""
+        names := CardNames(r.cards)
+        hits := []
+        for i, c in r.cards
+            if NameMatch(names[i], nm)
+                hits.Push(c)
+        j := (A_Index = 2) ? k - (total - hits.Length) : k   ; scrolled: first copies hidden above
+        if (j >= 1 && j <= hits.Length)
+            return hits[j]
+        if (A_Index = 1) {
+            if (MT.units.Length <= r.cards.Length || !OverviewScroll("WheelDown"))
+                break
+            Wait(400)
+        } else if (A_Index = 2) {
+            if !OverviewScroll("WheelUp")
+                break
+            Wait(300)
+        }
+    }
+    if !u.HasOwnProp("nameMiss") {
+        u.nameMiss := true
+        seen := ""
+        if MT.HasOwnProp("ncNames")
+            for t in MT.ncNames
+                seen .= (seen = "" ? "" : ", ") t
+        Out("  unit " u.slot " (" nm "): no card with that name in Unit Overview (read: " seen ") - check the name in F8")
+    }
+    return ""
+}
+
 CardOf(u) {
+    nm := Trim(CFG.Get("Name" u.slot, ""))
+    if (nm != "")                                  ; named slot: find the card by its name
+        return CardByName(u, nm)
     order := []
     for v in MT.units {
         i := order.Length + 1
