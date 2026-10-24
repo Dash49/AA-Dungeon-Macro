@@ -1,13 +1,13 @@
 name: รายงานบั๊ก
-description: มาโครค้าง ทำงานผิด หรือแพ้แปลกๆ — แนบไฟล์รายงานให้ผู้พัฒนาแก้
+description: มาโครค้าง ทำงานผิด หรือแพ้แปลกๆ — ส่ง log ให้ระบบแก้บั๊กอัตโนมัติ
 title: "[บั๊ก] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        ในหน้าต่างตั้งค่า กดปุ่ม **🐞 รายงานบั๊ก** (หรือกด **F9** ตอนมาโครเปิดอยู่) จะได้ไฟล์ `bug_report_....zip`
-        แล้วลากไฟล์นั้นมาวางในช่อง "ไฟล์รายงาน" ด้านล่าง
+        กด **F9** ตอนมาโครเปิดอยู่ (หรือปุ่ม **🐞 รายงานบั๊ก** ในหน้าต่างตั้งค่า) หน้านี้จะเปิดขึ้นมาเอง และ log จะถูกคัดลอกไว้ให้แล้ว
+        แค่คลิกช่อง **log ของมาโคร** แล้วกด **Ctrl+V** จากนั้นกด Create
   - type: textarea
     id: what
     attributes:
@@ -21,9 +21,15 @@ body:
       label: เกิดตอนไหน
       placeholder: เช่น Depth 4, Magic Town, เวฟ 5, หน้าร้านค้า
   - type: textarea
-    id: files
+    id: log
     attributes:
-      label: ไฟล์รายงาน (.zip) และภาพหน้าจอ
-      description: ลากไฟล์ bug_report_....zip และภาพหน้าจอตอนที่ค้าง (ถ้ามี) มาวางที่นี่
+      label: log ของมาโคร
+      description: คลิกที่นี่แล้วกด Ctrl+V (F9 คัดลอกไว้ให้แล้ว)
+      render: text
     validations:
       required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: ภาพหน้าจอ / ไฟล์ zip (ไม่บังคับ)
+      description: ลากภาพหน้าจอตอนที่ค้าง หรือไฟล์ bug_report_....zip มาวางที่นี่

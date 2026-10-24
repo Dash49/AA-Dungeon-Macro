@@ -1559,16 +1559,19 @@ HillCands(zone, style, pt0, slot, path, cells) {
     ps := [], stp := Max(1, path.Length // 300), i := 1
     while (i <= path.Length)
         ps.Push(path[i]), i += stp
-    pool := [], tries := 0
-    while (pool.Length < 120 && tries < 1500) {
+    pool := [], tries := 0, need := 3              ; green neighbours wanted (of 4)
+    while (pool.Length < 120 && tries < 2000) {
         tries++
+        if (tries = 1000 && pool.Length < 5)       ; thin hills: accept edge spots too
+            need := 1
         gp := zone[Random(1, zone.Length)]
         x := gp[1], y := gp[2]
-        ; well inside the zone: the grid points around it are green too
-        if !(zm.Has((x + 12) * 4096 + y) && zm.Has((x - 12) * 4096 + y)
-            && zm.Has(x * 4096 + y + 12) && zm.Has(x * 4096 + y - 12))
+        ; inside the zone: most grid points around it are green too
+        nb := zm.Has((x + 12) * 4096 + y) + zm.Has((x - 12) * 4096 + y)
+            + zm.Has(x * 4096 + y + 12) + zm.Has(x * 4096 + y - 12)
+        if (nb < need)
             continue
-        if (InUi(x, y) || NearPath(cells, x, y, 14))
+        if (InUi(x, y) || NearPath(cells, x, y, 8))
             continue
         ok := true
         for v in MT.units
@@ -1583,6 +1586,7 @@ HillCands(zone, style, pt0, slot, path, cells) {
         if ok
             pool.Push({x: x + Random(-4, 4), y: y + Random(-4, 4)})
     }
+    Out("  unit " slot ": hill zone " zone.Length " points, " pool.Length " spots to try")
     anc := (style = "group") ? GroupAnchor(slot) : ""
     return ScoreCands(pool, style, ps, pt0, anc)
 }
@@ -1747,7 +1751,8 @@ ScoreCands(pool, style, ps, pt0, anc) {
     for c in pool {
         switch style {
             case "near":   c.s := -MinDist(ps, c.x, c.y)
-            case "far":    c.s := Min(MinDist(ps, c.x, c.y), 450)
+            case "far":                            ; far, but not out in the void
+                d := MinDist(ps, c.x, c.y), c.s := (d <= 230) ? d : 230 - (d - 230) * 0.6
             case "cover":  c.s := CountNear(ps, c.x, c.y, 170)
             case "spread": c.s := MinUnitDist(c.x, c.y) + CountNear(ps, c.x, c.y, 150) * 0.3
             case "center": c.s := -Sqrt((c.x - 960) ** 2 + (c.y - 540) ** 2)
@@ -1806,7 +1811,8 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     if !MT.HasOwnProp("streak")
         MT.streak := 0
     wide := (MT.streak >= 1 || MT.HasOwnProp("wideMode")   ; panel side failed once,
-        || (style = "at" && IsObject(pt0) && pt0.x > 1180))    ; or the spot is under it:
+        || (style = "at" && IsObject(pt0) && pt0.x > 1180)     ; or the spot is under it,
+        || IsHill(slot))                                       ; or hills (often under it):
     if wide                                        ; use the whole map, check by yen
         CloseOverview()
     else if (MT.units.Length < 8) {

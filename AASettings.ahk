@@ -946,15 +946,41 @@ ReportBug() {
         }
         MsgBox("ส่งเข้า Discord ไม่สำเร็จ จะเปิดหน้า GitHub ให้ส่งแทน", "AA Dungeon", "Icon!")
     }
-    ; 2) GitHub: open the bug page + the folder with the zip selected
+    ; 2) GitHub: the log goes in as text (pasted from the clipboard), so the
+    ;    report works even when a file upload fails. The zip is extra.
+    logtxt := "== system ==`n" SysInfo() "`n== AADungeon.log (newest part) ==`n"
+    lf := A_ScriptDir "\AADungeon.log"
+    if FileExist(lf) {
+        lines := StrSplit(FileRead(lf, "UTF-8"), "`n", "`r"), tail := "", i := lines.Length
+        while (i >= 1 && StrLen(tail) + StrLen(lines[i]) < 45000)    ; GitHub limit is 65536
+            tail := lines[i] "`n" tail, i--
+        logtxt .= tail
+    } else
+        logtxt .= "(no log file)"
+    A_Clipboard := logtxt
+    title := "[บั๊ก] " SubStr(StrReplace(desc, "`n", " "), 1, 70)
+    Run(ISSUE_URL "&title=" UrlEnc(title) "&what=" UrlEnc(SubStr(desc, 1, 500)))
     Run('explorer.exe /select,"' zip '"')
-    Run(ISSUE_URL)
-    A_Clipboard := desc
-    MsgBox("สร้างไฟล์รายงานแล้ว: " zip "`n`n"
-        . "1. หน้าแจ้งบั๊กบน GitHub เปิดขึ้นมาแล้ว (ต้องล็อกอิน GitHub)`n"
-        . "2. ลากไฟล์ zip ที่เลือกไว้ในโฟลเดอร์ ไปวางในช่องไฟล์`n"
-        . "3. ข้อความที่พิมพ์ไว้ถูกคัดลอกแล้ว กด Ctrl+V ในช่อง 'เกิดอะไรขึ้น' ได้เลย`n"
-        . "4. กด Create / Submit", "AA Dungeon", "Iconi")
+    MsgBox("หน้าแจ้งบั๊กบน GitHub เปิดขึ้นมาแล้ว (ต้องล็อกอิน GitHub) ช่อง 'เกิดอะไรขึ้น' กรอกให้แล้ว`n`n"
+        . "1. คลิกช่อง 'log ของมาโคร' แล้วกด Ctrl+V  (log ถูกคัดลอกไว้ให้แล้ว)`n"
+        . "2. ถ้ามีภาพหน้าจอ ลากมาวางในช่องไฟล์ได้ (zip ก็ได้ แต่ไม่จำเป็นแล้ว)`n"
+        . "3. กด Create`n`n"
+        . "ไฟล์ zip สำรองไว้ที่: " zip, "AA Dungeon", "Iconi")
+}
+
+UrlEnc(str) {
+    buf := Buffer(StrPut(str, "UTF-8"))
+    StrPut(str, buf, "UTF-8")
+    out := ""
+    Loop buf.Size - 1 {
+        b := NumGet(buf, A_Index - 1, "UChar")
+        if ((b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
+            || b = 0x2D || b = 0x2E || b = 0x5F || b = 0x7E)
+            out .= Chr(b)
+        else
+            out .= Format("%{:02X}", b)
+    }
+    return out
 }
 
 SysInfo() {
