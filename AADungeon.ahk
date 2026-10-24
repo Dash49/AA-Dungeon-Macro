@@ -2280,7 +2280,26 @@ NameMatch(ocrText, name) {
         return false
     if (InStr(a, b) || (StrLen(a) >= 3 && InStr(b, a)))
         return true
+    ; long names are cut on the card ("Dark Mage (Fallen" for "Dark Mage (Fallen Star)")
+    ; and OCR adds junk: a long enough common piece is a match
+    L := CommonRun(a, b)
+    if (StrLen(b) > 3 && (L >= Min(StrLen(b), 6) || (L >= 4 && L >= 0.6 * Min(StrLen(a), StrLen(b)))))
+        return true
     return NameDist(SubStr(a, 1, StrLen(b)), b) <= Max(1, StrLen(b) // 4)
+}
+; length of the longest common substring
+CommonRun(a, b) {
+    best := 0, la := StrLen(a), lb := StrLen(b)
+    Loop la {
+        i := A_Index
+        Loop lb {
+            j := A_Index, n := 0
+            while (i + n <= la && j + n <= lb && SubStr(a, i + n, 1) = SubStr(b, j + n, 1))
+                n++
+            best := Max(best, n)
+        }
+    }
+    return best
 }
 NameDist(a, b) {                                   ; edit distance (Lev() above gives up early)
     la := StrLen(a), lb := StrLen(b)
@@ -2322,8 +2341,15 @@ CardByName(u, nm) {
         if (j >= 1 && j <= hits.Length)
             return hits[j]
         if (A_Index = 1) {
-            if (MT.units.Length <= r.cards.Length || !OverviewScroll("WheelDown"))
+            if (MT.units.Length <= r.cards.Length)
                 break
+            if !OverviewScroll("WheelDown") {          ; panel still moving? once more
+                Wait(400)
+                if !OverviewScroll("WheelDown") {
+                    Out("  unit list did not scroll down (" r.cards.Length " cards shown, " MT.units.Length " units)")
+                    break
+                }
+            }
             Wait(400)
         } else if (A_Index = 2) {
             if !OverviewScroll("WheelUp")
