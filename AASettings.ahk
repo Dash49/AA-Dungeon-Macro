@@ -835,11 +835,11 @@ ReportBug() {
         for f in ["settings.ini", "plan.txt"]
             if FileExist(A_ScriptDir "\" f)
                 FileCopy(A_ScriptDir "\" f, tmp "\" f, 1)
-        ; the 2 newest shop screenshots
+        ; the newest shop screenshot (keeps the zip small enough to upload)
         shots := []
         Loop Files A_ScriptDir "\shots\*.png"
             shots.Push({p: A_LoopFileFullPath, n: A_LoopFileName, t: A_LoopFileTimeModified})
-        Loop 2 {
+        Loop 1 {
             best := 0
             for i, sh in shots
                 if (!best || sh.t > shots[best].t)
