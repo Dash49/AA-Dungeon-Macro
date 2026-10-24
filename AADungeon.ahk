@@ -2651,7 +2651,26 @@ UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
 ; ------------------------------------------------------ unit panel
 ; click the unit on the map -> its panel opens on the left. The auto
 ; switch says "Off"/"On"; the ability button is just below it.
+; Open the unit's own panel (left side): close any open panel, then click
+; the unit's picture on its card in Unit Overview (found by name). Only
+; when that fails, click where the unit stands on the map.
 OpenPanel(u) {
+    CloseUnitPanel()
+    nm := Trim(CFG.Get("Name" u.slot, ""))
+    c := CardOf(u)
+    if IsObject(c) {
+        Loop 2 {
+            ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)   ; the picture on the card
+            Wait(550)
+            r := OcrRef(0, 180, 900, 600, 2, "l", "c")
+            if (IsObject(r) && InStr(r.t, "pgrade") && (nm = "" || NameScore(r.t, nm) >= 0.6))
+                return r                           ; the right unit's panel
+            CloseUnitPanel()
+            c := CardOf(u)
+            if !IsObject(c)
+                break
+        }
+    }
     CloseOverview()
     for dy in [-10, -25, 4, -40, -55] {
         ClickRef(u.x, u.y + dy)
@@ -2672,38 +2691,32 @@ AutoSwitch(r, &x, &y, &on) {
     return false
 }
 
+; the skill button on the panel ("Gale of the Moon (Activate)")
+AbilityButton(r, &x, &y) {
+    for wd in Words(r)
+        if (wd.x > PX(480, "l") && RegExMatch(wd.t, "i)activ")) {
+            x := wd.x, y := wd.y
+            return true
+        }
+    return false
+}
+
 UseAbility(u, times) {
-    found := false, x := 0, y := 0, lv := "?"
-    Loop 4 {
-        r := OpenPanel(u)
-        if !IsObject(r)
-            return Out("  unit " u.slot ": panel did not open - ability skipped")
-        if AutoSwitch(r, &x, &y, &on) {
-            found := true
-            break
-        }
-        lv := RegExMatch(r.t, "i)pgrade\s*\W?\s*(\d+)", &m) ? m[1] : "?"
-        if (A_Index = 4 || u.maxed)
-            break                                  ; already tried / can't level further
-        ; no ability button yet = it unlocks at a higher level: one more level
-        Out("  unit " u.slot ": no ability yet (level " lv ") - upgrading once more")
-        res := "poor"
-        Loop 20 {
-            res := UpgradeOnce(u)
-            if (res != "poor" || MatchOver())
-                break
-            Wait(1000)
-        }
-        if (res = "max" || res = "lost")
-            u.maxed := true
-    }
-    if !found {
+    r := OpenPanel(u)
+    if !IsObject(r)
+        return Out("  unit " u.slot ": panel did not open - ability skipped")
+    x := 0, y := 0
+    if AbilityButton(r, &x, &y)
+        how := "skill button"
+    else if AutoSwitch(r, &x, &y, &on)             ; the skill sits under the auto switch
+        y += 85 * WIN.u, how := "under auto switch"
+    else {
         CloseUnitPanel()
-        return Out("  unit " u.slot ": no ability on its panel (level " lv ") - skipped")
+        return Out("  unit " u.slot ": no skill on its panel - skipped")
     }
     Loop times {
-        ClickAt(x, y + 80 * WIN.u)
-        Out("  ability unit " u.slot " (" A_Index "/" times ")")
+        ClickAt(x, y)
+        Out("  ability unit " u.slot " (" A_Index "/" times ", " how ")")
         if (A_Index < times)
             Wait(1500)
     }
