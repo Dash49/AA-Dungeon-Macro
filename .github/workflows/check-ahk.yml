@@ -1,0 +1,29 @@
+# Loads the scripts in real AutoHotkey v2 (without running them) on every
+# push / pull request, so a syntax error never reaches the users.
+name: AHK syntax check
+on:
+  push:
+    paths: ["**.ahk", ".github/workflows/check-ahk.yml"]
+  pull_request:
+    paths: ["**.ahk"]
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get AutoHotkey v2
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile ahk.zip
+          Expand-Archive ahk.zip -DestinationPath ahk
+      - name: Validate scripts
+        shell: pwsh
+        run: |
+          $fail = $false
+          foreach ($f in @("AADungeon.ahk", "AASettings.ahk")) {
+            $out = & .\ahk\AutoHotkey64.exe /ErrorStdOut /Validate $f 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error file=$f::$out"; $fail = $true }
+            else { Write-Host "$f OK" }
+          }
+          if ($fail) { exit 1 }

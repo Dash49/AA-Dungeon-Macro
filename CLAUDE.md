@@ -16,7 +16,8 @@ Users' own `settings.ini` / `plan.txt` are not in the repo, so updates (F8 > Upd
 The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `Lib/OCR.ahk`.
 
 `.ahk` files are UTF-8 **with BOM**. Keep the BOM and CRLF-agnostic style; never reformat whole files.
-There is no AutoHotkey on the CI runner: you cannot run the code. Re-read your edit carefully for v2
+There is no AutoHotkey on your runner: you cannot run the code (the separate "AHK syntax check" workflow
+loads both scripts in real AutoHotkey on Windows for every push/PR – a red check there means a load error). Re-read your edit carefully for v2
 syntax (see pitfalls) – a syntax error stops the macro for every user.
 
 ## How the macro works
@@ -59,6 +60,7 @@ old macro version (compare the file date with the latest commit), costs/plan not
 A loop of the same line usually shows where it is stuck.
 
 ## AHK v2 pitfalls (all of these broke the macro before)
+- Two functions with the same name (any case) = the script will not load (`Lev` broke it once).
 - Names are case-insensitive: a local variable must not share a function's name
   (e.g. a variable `lines` hides the function `Lines()` – that crashed the shop).
 - Assigning a global inside a function needs `global X`; property/item writes (`MT.x := 1`) do not.
