@@ -9,8 +9,11 @@ Users are Thai; talk to them in Thai (issue comments, PR text). Code comments st
 | `AADungeon.ahk` | the macro (one file, ~2300 lines) |
 | `AASettings.ahk` | Thai settings window (F8) for plan.txt / settings.ini, bug report (F9) |
 | `Lib/OCR.ahk` | Descolada's Windows OCR wrapper – third party, do not edit |
-| `plan.txt` | example plan (users have their own) |
-| `settings.ini` | example settings, **UTF-16 LE** (IniRead/IniWrite) – keep that encoding |
+| `plan.example.txt` | example plan; copied to the user's `plan.txt` on first run |
+| `settings.example.ini` | example settings, **UTF-16 LE**; copied to `settings.ini` on first run |
+
+Users' own `settings.ini` / `plan.txt` are not in the repo, so updates (F8 > Update, or a new ZIP) never overwrite them.
+The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `Lib/OCR.ahk`.
 
 `.ahk` files are UTF-8 **with BOM**. Keep the BOM and CRLF-agnostic style; never reformat whole files.
 There is no AutoHotkey on the CI runner: you cannot run the code. Re-read your edit carefully for v2

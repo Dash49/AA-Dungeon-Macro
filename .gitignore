@@ -2,3 +2,6 @@ AADungeon.log
 shots/
 *.bak
 bug_reports/
+settings.ini
+plan.txt
+backup/

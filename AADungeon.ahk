@@ -45,6 +45,21 @@ Hotkey "F7", (*) => (FindRoblox(), CameraSetup(2))
 Hotkey "F8", (*) => OpenSettings()                         ; settings window
 Hotkey "F9", (*) => OpenSettings("/report")                ; send a bug report
 
+; compare this file with the newest one on GitHub (once, at start)
+CheckNewVersion() {
+    try {
+        tmp := A_Temp "\aad_check.ahk"
+        Download("https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/AADungeon.ahk?t=" A_TickCount, tmp)
+        new := StrReplace(FileRead(tmp, "UTF-8"), "`r`n", "`n")
+        cur := StrReplace(FileRead(A_ScriptFullPath, "UTF-8"), "`r`n", "`n")
+        if (InStr(SubStr(new, 1, 60), "#Requires AutoHotkey v2") && new != cur) {
+            Out("A new macro version is on GitHub - F8 > Update")
+            if !STATE.run
+                Status("AA Dungeon ready - F2 start   (update available: F8 > Update)")
+        }
+    }
+}
+
 OpenSettings(arg := "") {
     f := A_ScriptDir "\AASettings.ahk"
     if FileExist(f)
@@ -57,14 +72,19 @@ LoadConfig()
 FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =====`n", LOGFILE, "UTF-8")
 Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)")
 Status("AA Dungeon ready - F2 start")
+SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 return
 
 ; ===================================================== configuration
 LoadConfig() {
+    ; first run: start from the example file (settings.ini is the user's own
+    ; and is not in the download, so updates never overwrite it)
+    if (!FileExist(INI) && FileExist(A_ScriptDir "\settings.example.ini"))
+        FileCopy(A_ScriptDir "\settings.example.ini", INI)
     d := Map(
-        "Boss", 100, "Chest", 40, "Hoard", 20, "Shrine", 25, "Open", 5, "Normal", 0,
+        "Boss", 100, "Chest", 70, "Hoard", 20, "Shrine", 25, "Open", 5, "Normal", 0,
         "ShopRich", 60, "ShopMid", 20, "ShopPoor", 0, "ShopRichCoins", 1000, "ShopMidCoins", 600, "ShopBuyAll", 2000,
-        "Curse", -10, "CurseMidDepth", 10, "CurseMid", -40, "CurseHighDepth", 15, "CurseHigh", -150,
+        "Curse", -10, "CurseMidDepth", 10, "CurseMid", -30, "CurseHighDepth", 15, "CurseHigh", -60,
         "Lookahead", 0.5, "ShrineMin", 25, "ShrineChest", 20, "ShrineRare", 35,
         "SaveChests", 1, "AutoVote", 1, "OnFinish", "again",
         "Cost1", 550, "Cost2", 800, "Cost3", 2000, "Cost4", 1300, "Cost5", 2000, "Cost6", 1400,
@@ -1148,8 +1168,11 @@ DoLeave(r) {
 ; place 1 x3 | upgrade 1,2 [to 3|+1|max] [even|one] [until wave 5]
 ; ability 3 x2 | auto 6 | wait 5 | wave 7
 LoadPlan() {
-    if !FileExist(PLANFILE) {
-        FileAppend("place 1 x3`nplace 2 x1`nupgrade all max`n", PLANFILE, "UTF-8")
+    if !FileExist(PLANFILE) {                      ; first run: copy the example plan
+        if FileExist(A_ScriptDir "\plan.example.txt")
+            FileCopy(A_ScriptDir "\plan.example.txt", PLANFILE)
+        else
+            FileAppend("place 1 x3`nplace 2 x1`nupgrade all max`n", PLANFILE, "UTF-8")
     }
     steps := [], bad := []
     for i, raw in StrSplit(FileRead(PLANFILE, "UTF-8"), "`n", "`r") {

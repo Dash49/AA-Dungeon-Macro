@@ -67,6 +67,9 @@ global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่ม
 global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไกลทางเดิน", "group", "รวมกลุ่ม", "spread", "กระจายห่างกัน",
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
+; ---- update: only the program files are replaced, never settings.ini / plan.txt
+global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
+global UPDATE_FILES := ["AADungeon.ahk", "AASettings.ahk", "Lib/OCR.ahk"]
 global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ"]
 
 global Steps := []          ; ขั้นตอนของแผน
@@ -87,13 +90,13 @@ LoadSettings()
 if Steps.Length
     FillBuilder(Steps[1])
 Dirty := false
-G.Show("w800 h650")
+G.Show("w800 h680")
 return
 
 ; ============================================================== GUI
 BuildGui() {
     global G
-    G := Gui("+MinSize800x650", "AA Dungeon - ตั้งค่ามาโคร")
+    G := Gui("+MinSize800x680", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
     tab := G.AddTab3("x10 y10 w780 h585", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป"])
@@ -243,7 +246,8 @@ BuildGui() {
     G.AddButton("x10 y605 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
     G.AddButton("x140 y605 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
     G.AddButton("x370 y605 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
-    C.status := G.AddText("x530 y614 w260 cGreen", "")
+    G.AddButton("x530 y605 w160 h35", "🔄 อัปเดตมาโคร").OnEvent("Click", (*) => UpdateMacro())
+    C.status := G.AddText("x12 y650 w776 cGreen", "")
     UpdateBuilder()
 }
 
@@ -803,6 +807,68 @@ OnClose(*) {
                 return true
         }
     }
+    ExitApp
+}
+
+; ============================================================ update
+; Downloads the newest program files from GitHub and replaces only those.
+; settings.ini, plan.txt, logs and reports are never touched.
+UpdateMacro() {
+    C.status.Text := "กำลังเช็คเวอร์ชันใหม่..."
+    dir := A_Temp "\aad_update"
+    changed := []
+    try {
+        DirCreate(dir)
+        for f in UPDATE_FILES {
+            tmp := dir "\" StrReplace(f, "/", "_")
+            Download(REPO_RAW f "?t=" A_TickCount, tmp)
+            new := FileRead(tmp, "UTF-8")
+            if !InStr(SubStr(new, 1, 60), "#Requires AutoHotkey v2")
+                throw Error("ไฟล์ที่โหลดมาไม่ถูกต้อง: " f)
+            loc := A_ScriptDir "\" StrReplace(f, "/", "\")
+            cur := FileExist(loc) ? FileRead(loc, "UTF-8") : ""
+            if (StrReplace(new, "`r`n", "`n") != StrReplace(cur, "`r`n", "`n"))
+                changed.Push({f: f, tmp: tmp, loc: loc})
+        }
+    } catch as err {
+        C.status.Text := ""
+        MsgBox("เช็คเวอร์ชันใหม่ไม่ได้ (ต่อเน็ตอยู่ไหม?)`n`n" err.Message, "AA Dungeon", "Icon!")
+        return
+    }
+    if !changed.Length {
+        C.status.Text := "เป็นเวอร์ชันล่าสุดแล้ว"
+        return
+    }
+    list := ""
+    for c in changed
+        list .= "  • " c.f "`n"
+    if (MsgBox("มีเวอร์ชันใหม่:`n" list "`nอัปเดตเลยไหม? (การตั้งค่าและแผนของคุณจะไม่ถูกเปลี่ยน)`n"
+        . "มาโครจะเปิดใหม่ ถ้ากำลังเล่นอยู่จะหยุด", "AA Dungeon", "YesNo Iconi") != "Yes") {
+        C.status.Text := ""
+        return
+    }
+    if Dirty
+        SaveAll(false)
+    bak := A_ScriptDir "\backup\" SubStr(A_Now, 1, 8) "_" SubStr(A_Now, 9, 6)
+    try {
+        for c in changed {
+            if FileExist(c.loc) {
+                SplitPath(c.loc, &nm)
+                DirCreate(bak)
+                FileCopy(c.loc, bak "\" nm, 1)
+            }
+            SplitPath(c.loc, , &d)
+            DirCreate(d)
+            FileCopy(c.tmp, c.loc, 1)
+        }
+    } catch as err {
+        MsgBox("อัปเดตไม่สำเร็จ: " err.Message "`nไฟล์เดิมสำรองไว้ที่ " bak, "AA Dungeon", "Icon!")
+        return
+    }
+    if FileExist(MACRO)
+        Run('"' A_AhkPath '" "' MACRO '"')         ; restart the macro with the new code
+    MsgBox("อัปเดตแล้ว กด F2 ในเกมเพื่อเริ่ม`n(ไฟล์เก่าสำรองไว้ที่ " bak ")", "AA Dungeon", "Iconi")
+    Run('"' A_AhkPath '" "' A_ScriptFullPath '"')  ; reopen this window (new version)
     ExitApp
 }
 
