@@ -765,15 +765,23 @@ ReadRoute() {
         for b in big
             if (Abs(b.x - x) < 90)
                 tile.labels.Push(b.t)
-        ; next rooms: small labels nearest to this tile, grouped per small tile
+        ; next rooms: the small tiles right above this tile (up to 3, 111 px
+        ; apart) are where you can go after it. Their labels are tiny, so
+        ; read just this group, enlarged, then split the words per tile.
         grp := []
-        for s in small {
-            nearest := 0, dmin := 99999
-            for x2 in layouts[best]
-                if (Abs(s.x - x2) < dmin)
-                    dmin := Abs(s.x - x2), nearest := x2
-            if (nearest = x)
-                grp.Push(s)
+        g := OcrRef(x - 172, 365, x + 172, 485, 4)
+        for wd in Words(g)
+            if (t := LabelType(wd.t))
+                grp.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960})
+        if !grp.Length {                           ; fall back to the whole-row read
+            for s in small {
+                nearest := 0, dmin := 99999
+                for x2 in layouts[best]
+                    if (Abs(s.x - x2) < dmin)
+                        dmin := Abs(s.x - x2), nearest := x2
+                if (nearest = x)
+                    grp.Push(s)
+            }
         }
         tile.ahead := Cluster(grp, 55)
         res.tiles.Push(tile)
