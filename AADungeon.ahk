@@ -1525,14 +1525,19 @@ HillScan() {
             }
     }
     Out("Hill check (unit " slot "): no hill on screen - walking to find one before the start")
-    for d in dirs {
-        Walk(d, t)
-        if LookHere(slot, &m) {
-            RS.hillScan := m, RS.hillDir := d
-            Out("  hills found walking " StrUpper(d) " - staying here")
-            return
+    Loop 2 {                                       ; second round walks twice as far
+        tw := t * A_Index
+        if (A_Index = 2)
+            Out("  no hill yet - looking again, walking farther (" tw " s each way)")
+        for d in dirs {
+            Walk(d, tw)
+            if LookHere(slot, &m) {
+                RS.hillScan := m, RS.hillDir := d
+                Out("  hills found walking " StrUpper(d) " - staying here")
+                return
+            }
+            Walk(back[d], tw)
         }
-        Walk(back[d], t)
     }
     RS.hillScan := Map()
     Out("  no hill found in any direction - hill units will look again during the match")
