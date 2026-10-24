@@ -1214,9 +1214,6 @@ PlayMatch() {
     global MT
     Out("Match started - running the plan")
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
-    if IsObject(RS.hillScan)                        ; hill zones seen on the vote screen
-        MT.hillCells := RS.hillScan
-    RS.hillScan := ""
     ; the vote panel can still be there for a moment - never place during it
     Loop 20 {
         if !InStr(AllText(), "Starts in")
@@ -1227,6 +1224,11 @@ PlayMatch() {
     if !RS.camVote                                  ; camera was not set on the vote screen
         CameraSetup()
     RS.camVote := false                             ; next match sets it again
+    if !IsObject(RS.hillScan)                       ; hills not checked on the vote screen
+        HillScan()
+    if IsObject(RS.hillScan)                        ; ground units keep off these hills
+        MT.hillCells := RS.hillScan
+    RS.hillScan := ""
     Focus()
     for i, st in MT.planSteps {
         Status("step " i "/" MT.planSteps.Length ": " st.text)
@@ -1463,7 +1465,10 @@ RememberHills(zone) {
                 MT.hillCells[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
         }
 }
-; on the vote screen: hold the first hill unit for a moment to see the hills
+; Before the match starts (vote screen): hold the first hill unit to see
+; the hills. No hill on screen -> walk W/D/S/A (HillWalk s each) until one
+; shows up and STAY there, so every hill unit can be placed from this spot.
+; A way with no hill is walked back before trying the next one.
 HillScan() {
     slot := 0
     Loop 6
@@ -1473,6 +1478,37 @@ HillScan() {
         }
     if !slot
         return
+    n := HillLook(slot, &m)
+    if (n >= 8) {
+        RS.hillScan := m
+        Out("Hill check (unit " slot "): " n " green points on screen")
+        return
+    }
+    t := CFG.Get("HillWalk", 2.5) + 0
+    dirs := ["w", "d", "s", "a"], back := Map("w", "s", "s", "w", "a", "d", "d", "a")
+    if RS.HasOwnProp("hillDir") {                  ; the way that worked last time first
+        for i, d in dirs
+            if (d = RS.hillDir) {
+                dirs.RemoveAt(i), dirs.InsertAt(1, d)
+                break
+            }
+    }
+    Out("Hill check (unit " slot "): no hill on screen - walking to find one before the start")
+    for d in dirs {
+        Walk(d, t)
+        n := HillLook(slot, &m)
+        if (n >= 8) {
+            RS.hillScan := m, RS.hillDir := d
+            Out("  hills found walking " StrUpper(d) " (" n " green points) - staying here")
+            return
+        }
+        Walk(back[d], t)
+    }
+    RS.hillScan := Map()
+    Out("  no hill found in any direction - hill units will look again during the match")
+}
+; hold a hill unit, read the new green points, put it back -> count, &cells
+HillLook(slot, &m) {
     Focus()
     MouseMove(PX(960), PY(120))
     Snap()
@@ -1492,8 +1528,7 @@ HillScan() {
         }
     Key("q")
     Wait(200)
-    RS.hillScan := m
-    Out("Hill check (unit " slot "): " (n >= 8 ? n " green points on screen" : "no hill on screen - will walk to find one"))
+    return n
 }
 ; spots inside the green zones, ordered by the placing style
 HillCands(zone, style, pt0, slot, path, cells) {
