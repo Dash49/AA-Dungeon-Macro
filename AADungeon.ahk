@@ -717,7 +717,7 @@ ReadRoute() {
     Snap()
     ; which tile layout: 3 tiles (624/959/1295), 2 (792/1127) or 1 (959)
     layouts := [[624, 959, 1295], [792, 1127], [959]]
-    best := 0, bestScore := -1
+    best := 1, bestScore := -999999                ; scores can all be negative (tiles not seen)
     for i, lay in layouts {
         sc := 0
         for x in lay {
@@ -737,6 +737,8 @@ ReadRoute() {
         if (sc > bestScore)
             bestScore := sc, best := i
     }
+    if (bestScore < -2)
+        Out("  route: tiles hard to see (best layout score " bestScore ")")
     for x in layouts[best] {
         tile := {x: x, labels: [], ahead: []}
         for b in big
