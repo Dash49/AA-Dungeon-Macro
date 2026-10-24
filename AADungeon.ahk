@@ -2280,9 +2280,9 @@ NameMatch(ocrText, name) {
         return false
     if (InStr(a, b) || (StrLen(a) >= 3 && InStr(b, a)))
         return true
-    return Lev(SubStr(a, 1, StrLen(b)), b) <= Max(1, StrLen(b) // 4)
+    return NameDist(SubStr(a, 1, StrLen(b)), b) <= Max(1, StrLen(b) // 4)
 }
-Lev(a, b) {
+NameDist(a, b) {                                   ; edit distance (Lev() above gives up early)
     la := StrLen(a), lb := StrLen(b)
     if !la
         return lb
