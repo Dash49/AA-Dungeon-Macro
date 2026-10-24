@@ -6,10 +6,18 @@
 ;  โดยไม่ต้องเปิดไฟล์เอง  เปิดได้จากไฟล์นี้ หรือกด F8 ตอนมาโครเปิดอยู่
 ; =====================================================================
 SetWorkingDir A_ScriptDir
+#Include %A_ScriptDir%\Lib\OCR.ahk          ; only to check OCR languages in bug reports
 
 global PLANFILE := A_ScriptDir "\plan.txt"
 global INI := A_ScriptDir "\settings.ini"
 global MACRO := A_ScriptDir "\AADungeon.ahk"
+
+; ---- รายงานบั๊ก ----
+; หน้าแจ้งบั๊กบน GitHub (ผู้ใช้ลากไฟล์ zip ใส่เอง)
+global ISSUE_URL := "https://github.com/Dash49/AA-Dungeon-Macro/issues/new?template=bug_report.yml"
+; ถ้าใส่ Discord webhook ตรงนี้ ปุ่มรายงานบั๊กจะส่งไฟล์เข้าห้อง Discord ให้เลย
+; (เว้นว่าง = ใช้ GitHub อย่างเดียว)
+global REPORT_WEBHOOK := ""
 
 ; ค่าเริ่มต้น (เหมือนในมาโคร)
 global DEF := Map(
@@ -59,6 +67,10 @@ global G := ""
 global Dirty := false
 global Filling := false
 
+if (A_Args.Length && A_Args[1] = "/report") {       ; F9 in the macro
+    ReportBug()
+    ExitApp
+}
 BuildGui()
 LoadPlanFile()
 LoadSettings()
@@ -201,7 +213,8 @@ BuildGui() {
     tab.UseTab()
     G.AddButton("x10 y565 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
     G.AddButton("x140 y565 w220 h35", "บันทึก + เปิดมาโครใหม่").OnEvent("Click", (*) => SaveAll(true))
-    C.status := G.AddText("x375 y574 w415 cGreen", "")
+    G.AddButton("x370 y565 w150 h35", "🐞 รายงานบั๊ก").OnEvent("Click", (*) => ReportBug())
+    C.status := G.AddText("x530 y574 w260 cGreen", "")
     UpdateBuilder()
 }
 
@@ -659,11 +672,11 @@ SaveAll(restart) {
     if restart {
         if FileExist(MACRO) {
             Run('"' A_AhkPath '" "' MACRO '"')
-            C.status.Text .= "  -  เปิดมาโครใหม่แล้ว กด F2 ในเกมเพื่อเริ่ม"
+            C.status.Text .= " - เปิดมาโครใหม่แล้ว กด F2"
         } else
             MsgBox("ไม่พบ AADungeon.ahk ในโฟลเดอร์เดียวกัน", "AA Dungeon", "Icon!")
     } else
-        C.status.Text .= "  -  ถ้ามาโครเปิดอยู่ ให้กด F3 เพื่อโหลดค่าใหม่"
+        C.status.Text .= " - กด F3 ในมาโครเพื่อโหลดค่าใหม่"
 }
 
 OnClose(*) {
@@ -679,3 +692,107 @@ OnClose(*) {
     }
     ExitApp
 }
+
+; ============================================================ bug report
+; Packs the log (last part), settings, plan, newest shop shots and system
+; info into one zip, then sends it to Discord (if a webhook is set) or opens
+; the GitHub bug page with the zip ready to drag in.
+ReportBug() {
+    what := InputBox("เกิดอะไรขึ้น? (เช่น ห้อง Depth 4 วางยูนิตช่อง 2 ซ้ำไม่หยุด)`n`n"
+        . "ไฟล์ที่จะแนบ: log ของมาโคร, settings.ini, plan.txt, ภาพร้านค้าล่าสุด, ข้อมูลจอ/Windows`n"
+        . "(ใน log อาจมีชื่อผู้เล่นในเกมของคุณ)", "AA Dungeon - รายงานบั๊ก", "w460 h220")
+    if (what.Result != "OK")
+        return
+    desc := Trim(what.Value)
+    dir := A_ScriptDir "\bug_reports"
+    stamp := SubStr(A_Now, 1, 8) "_" SubStr(A_Now, 9, 6)   ; A_Now is always the western year
+    tmp := dir "\report_" stamp
+    zip := dir "\bug_report_" stamp ".zip"
+    try {
+        DirCreate(tmp)
+        ; log: only the last 4000 lines (the newest runs)
+        lf := A_ScriptDir "\AADungeon.log"
+        if FileExist(lf) {
+            lines := StrSplit(FileRead(lf, "UTF-8"), "`n", "`r")
+            first := Max(1, lines.Length - 4000), out := ""
+            Loop lines.Length - first + 1
+                out .= lines[first + A_Index - 1] "`n"
+            FileAppend(out, tmp "\AADungeon.log", "UTF-8")
+        }
+        for f in ["settings.ini", "plan.txt"]
+            if FileExist(A_ScriptDir "\" f)
+                FileCopy(A_ScriptDir "\" f, tmp "\" f, 1)
+        ; the 2 newest shop screenshots
+        shots := []
+        Loop Files A_ScriptDir "\shots\*.png"
+            shots.Push({p: A_LoopFileFullPath, n: A_LoopFileName, t: A_LoopFileTimeModified})
+        Loop 2 {
+            best := 0
+            for i, sh in shots
+                if (!best || sh.t > shots[best].t)
+                    best := i
+            if !best
+                break
+            FileCopy(shots[best].p, tmp "\" shots[best].n, 1)
+            shots.RemoveAt(best)
+        }
+        FileAppend("What happened: " desc "`n`n" SysInfo(), tmp "\system.txt", "UTF-8")
+        q := "'"
+        RunWait('powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '
+            . q tmp "\*" q " -DestinationPath " q zip q ' -Force"', , "Hide")
+        DirDelete(tmp, 1)
+    } catch as err {
+        MsgBox("สร้างไฟล์รายงานไม่สำเร็จ: " err.Message, "AA Dungeon", "Icon!")
+        return
+    }
+    if !FileExist(zip) {
+        MsgBox("สร้างไฟล์ zip ไม่สำเร็จ`nไฟล์อยู่ที่: " tmp, "AA Dungeon", "Icon!")
+        return
+    }
+    ; 1) Discord webhook: send it straight away
+    if (REPORT_WEBHOOK != "") {
+        msg := "Bug report " stamp "`n" SubStr(StrReplace(desc, '"', "'"), 1, 1500)
+        code := RunWait('curl.exe -sf -o NUL -F "content=' msg '" -F "file=@' zip '" "' REPORT_WEBHOOK '"', , "Hide")
+        if (code = 0) {
+            MsgBox("ส่งรายงานให้ผู้พัฒนาแล้ว ขอบคุณครับ`n`nสำเนาเก็บไว้ที่: " zip, "AA Dungeon", "Iconi")
+            return
+        }
+        MsgBox("ส่งเข้า Discord ไม่สำเร็จ จะเปิดหน้า GitHub ให้ส่งแทน", "AA Dungeon", "Icon!")
+    }
+    ; 2) GitHub: open the bug page + the folder with the zip selected
+    Run('explorer.exe /select,"' zip '"')
+    Run(ISSUE_URL)
+    A_Clipboard := desc
+    MsgBox("สร้างไฟล์รายงานแล้ว: " zip "`n`n"
+        . "1. หน้าแจ้งบั๊กบน GitHub เปิดขึ้นมาแล้ว (ต้องล็อกอิน GitHub)`n"
+        . "2. ลากไฟล์ zip ที่เลือกไว้ในโฟลเดอร์ ไปวางในช่องไฟล์`n"
+        . "3. ข้อความที่พิมพ์ไว้ถูกคัดลอกแล้ว กด Ctrl+V ในช่อง 'เกิดอะไรขึ้น' ได้เลย`n"
+        . "4. กด Create / Submit", "AA Dungeon", "Iconi")
+}
+
+SysInfo() {
+    t := "Time: " A_YYYY "-" A_MM "-" A_DD " " A_Hour ":" A_Min ":" A_Sec "`n"
+    t .= "Windows: " A_OSVersion (A_Is64bitOS ? " 64-bit" : "") "`n"
+    t .= "AutoHotkey: " A_AhkVersion "`n"
+    try t .= "Macro file date: " FileGetTime(MACRO) "`n"
+    t .= "Screen: " A_ScreenWidth "x" A_ScreenHeight "  scale " Round(A_ScreenDPI / 96 * 100) "%  monitors " MonitorGetCount() "`n"
+    try {
+        if WinExist("ahk_exe RobloxPlayerBeta.exe") {
+            WinGetClientPos(&x, &y, &w, &h)
+            t .= "Roblox client: " w "x" h " at " x "," y (WinGetMinMax() = 1 ? " (maximised)" : "") "`n"
+        } else
+            t .= "Roblox: not running`n"
+    }
+    try {
+        langs := StrReplace(Trim(OCR.GetAvailableLanguages(), "`n "), "`n", ", ")
+        t .= "OCR languages: " (langs = "" ? "(none)" : langs) "`n"
+    } catch {
+        try {
+            OCR.LoadLanguage("en-US")
+            t .= "OCR en-US: OK`n"
+        } catch
+            t .= "OCR en-US: MISSING (install English OCR)`n"
+    }
+    return t
+}
+

@@ -7,7 +7,7 @@
 ;
 ;  F2 = start     F3 = stop (reload)     F4 = pause / resume
 ;  F5 = "what do you see?" (writes the screen text to the log)
-;  F8 = settings window (AASettings.ahk)
+;  F8 = settings window (AASettings.ahk)    F9 = send a bug report
 ;
 ;  Files next to this script:
 ;    plan.txt     - what to place / upgrade, in order (see the file)
@@ -43,11 +43,12 @@ Hotkey "F5", (*) => DebugSee()
 Hotkey "F6", (*) => (FindRoblox(), CameraSetup())          ; test the camera
 Hotkey "F7", (*) => (FindRoblox(), CameraSetup(2))
 Hotkey "F8", (*) => OpenSettings()                         ; settings window
+Hotkey "F9", (*) => OpenSettings("/report")                ; send a bug report
 
-OpenSettings() {
+OpenSettings(arg := "") {
     f := A_ScriptDir "\AASettings.ahk"
     if FileExist(f)
-        Run('"' A_AhkPath '" "' f '"')
+        Run('"' A_AhkPath '" "' f '"' (arg != "" ? " " arg : ""))
     else
         MsgBox("AASettings.ahk not found next to the macro")
 }
