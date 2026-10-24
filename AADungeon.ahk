@@ -50,9 +50,9 @@ CheckNewVersion() {
     try {
         tmp := A_Temp "\aad_check.ahk"
         Download("https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/AADungeon.ahk?t=" A_TickCount, tmp)
-        new := StrReplace(FileRead(tmp, "UTF-8"), "`r`n", "`n")
+        latest := StrReplace(FileRead(tmp, "UTF-8"), "`r`n", "`n")
         cur := StrReplace(FileRead(A_ScriptFullPath, "UTF-8"), "`r`n", "`n")
-        if (InStr(SubStr(new, 1, 60), "#Requires AutoHotkey v2") && new != cur) {
+        if (InStr(SubStr(latest, 1, 60), "#Requires AutoHotkey v2") && latest != cur) {
             Out("A new macro version is on GitHub - F8 > Update")
             if !STATE.run
                 Status("AA Dungeon ready - F2 start   (update available: F8 > Update)")

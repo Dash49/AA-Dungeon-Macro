@@ -822,12 +822,12 @@ UpdateMacro() {
         for f in UPDATE_FILES {
             tmp := dir "\" StrReplace(f, "/", "_")
             Download(REPO_RAW f "?t=" A_TickCount, tmp)
-            new := FileRead(tmp, "UTF-8")
-            if !InStr(SubStr(new, 1, 60), "#Requires AutoHotkey v2")
+            latest := FileRead(tmp, "UTF-8")
+            if !InStr(SubStr(latest, 1, 60), "#Requires AutoHotkey v2")
                 throw Error("ไฟล์ที่โหลดมาไม่ถูกต้อง: " f)
             loc := A_ScriptDir "\" StrReplace(f, "/", "\")
             cur := FileExist(loc) ? FileRead(loc, "UTF-8") : ""
-            if (StrReplace(new, "`r`n", "`n") != StrReplace(cur, "`r`n", "`n"))
+            if (StrReplace(latest, "`r`n", "`n") != StrReplace(cur, "`r`n", "`n"))
                 changed.Push({f: f, tmp: tmp, loc: loc})
         }
     } catch as err {
