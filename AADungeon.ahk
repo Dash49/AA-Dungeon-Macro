@@ -7,6 +7,7 @@
 ;
 ;  F2 = start     F3 = stop (reload)     F4 = pause / resume
 ;  F5 = "what do you see?" (writes the screen text to the log)
+;  F8 = settings window (AASettings.ahk)
 ;
 ;  Files next to this script:
 ;    plan.txt     - what to place / upgrade, in order (see the file)
@@ -41,6 +42,15 @@ Hotkey "F4", (*) => TogglePause()
 Hotkey "F5", (*) => DebugSee()
 Hotkey "F6", (*) => (FindRoblox(), CameraSetup())          ; test the camera
 Hotkey "F7", (*) => (FindRoblox(), CameraSetup(2))
+Hotkey "F8", (*) => OpenSettings()                         ; settings window
+
+OpenSettings() {
+    f := A_ScriptDir "\AASettings.ahk"
+    if FileExist(f)
+        Run('"' A_AhkPath '" "' f '"')
+    else
+        MsgBox("AASettings.ahk not found next to the macro")
+}
 
 LoadConfig()
 FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =====`n", LOGFILE, "UTF-8")
