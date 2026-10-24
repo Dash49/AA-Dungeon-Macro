@@ -15,15 +15,23 @@ jobs:
       - name: Get AutoHotkey v2
         shell: pwsh
         run: |
-          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile ahk.zip
+          $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.19/AutoHotkey_2.0.19.zip"
+          Invoke-WebRequest $url -OutFile ahk.zip
           Expand-Archive ahk.zip -DestinationPath ahk
+          Get-ChildItem ahk -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1 -ExpandProperty FullName | Set-Content ahkpath.txt
+          Write-Host "AutoHotkey: $(Get-Content ahkpath.txt)"
       - name: Validate scripts
         shell: pwsh
         run: |
+          $exe = (Get-Content ahkpath.txt).Trim()
           $fail = $false
           foreach ($f in @("AADungeon.ahk", "AASettings.ahk")) {
-            $out = & .\ahk\AutoHotkey64.exe /ErrorStdOut /Validate $f 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) { Write-Host "::error file=$f::$out"; $fail = $true }
-            else { Write-Host "$f OK" }
+            $p = Start-Process -FilePath $exe -ArgumentList "/ErrorStdOut", "/Validate", $f -Wait -PassThru -NoNewWindow -RedirectStandardOutput "out.txt" -RedirectStandardError "err.txt"
+            $msg = ((Get-Content out.txt -Raw) + (Get-Content err.txt -Raw)) -replace "`r", ""
+            if ($p.ExitCode -ne 0) {
+              Write-Host "$f FAILED (exit $($p.ExitCode)):`n$msg"
+              Write-Host ("::error file=$f::" + ($msg -replace "`n", " | "))
+              $fail = $true
+            } else { Write-Host "$f OK" }
           }
           if ($fail) { exit 1 }
