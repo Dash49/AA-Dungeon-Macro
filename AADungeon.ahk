@@ -512,12 +512,22 @@ DoLobby(r) {
 }
 
 DoIntro(r) {
-    static tries := 0, lastAt := 0
+    static tries := 0, lastAt := 0, reopened := false
     tries := (A_TickCount - lastAt < 15000) ? tries + 1 : 1
     lastAt := A_TickCount
-    if (tries > 6) {                               ; the button does nothing: no key left?
-        Out("Could not enter the dungeon after 6 tries" (RegExMatch(r.t, "i)key") ? " - no Dungeon Key left?" : " - out of Dungeon Keys?")
-            . " Stopping. Get keys, then press F2.")
+    if (tries = 1)
+        reopened := false
+    if (tries = 4 && !reopened) {                  ; the button does nothing: close and reopen
+        Shot("intro_stuck")
+        Out("Enter Dungeon does nothing - closing the dungeon window and opening it again")
+        reopened := true
+        ClickRef(1542, 181)                        ; red X of the window
+        Wait(2500)
+        return
+    }
+    if (tries > 9) {
+        Out("Could not enter the dungeon (tried 9 times, reopened once)"
+            . (RegExMatch(r.t, "i)key") ? " - no Dungeon Key left?" : "") " Stopping - see shots\intro_stuck_*.png")
         tries := 0
         Reload()
     }
