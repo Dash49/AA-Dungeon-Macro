@@ -33,7 +33,7 @@ global DEF := Map(
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-    "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump",
+    "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -354,7 +354,7 @@ BuildGui() {
     G.AddText("x40 y572 w170", "ด่านที่ต้องเดินก่อนเริ่ม")
     C.stage := G.AddEdit("x215 y568 w400")
     C.stage.OnEvent("Change", (*) => MarkDirty())
-    G.AddText("x40 y598 w720 cGray", "ชื่อด่าน=ปุ่ม วินาที  คั่นหลายด่านด้วย |   เช่น  Magic Hill=a 3 jump|Snowy Town=d 3  (jump = กระโดดไปด้วย)")
+    G.AddText("x40 y598 w720 cGray", "ชื่อด่าน=ปุ่ม วินาที  คั่นหลายด่านด้วย |   เช่น  Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1  (jump = กระโดดด้วย, คั่นหลายท่าด้วย ,)")
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
     C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
