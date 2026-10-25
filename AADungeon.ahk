@@ -32,7 +32,7 @@ global WIN := {id: 0, x: 0, y: 0, w: 1920, h: 1080, u: 1.0}
 global STATE := {run: false, pause: false, stop: false}
 ; one dungeon run / one match
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
-global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false}
+global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false, stage: "", stageMove: "", stageWalked: false}
 global MT := {}
 global CFG := Map()
 
@@ -92,6 +92,7 @@ LoadConfig() {
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
+        "StageWalk", "Magic Hill=a 3",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -439,8 +440,12 @@ Start() {
         Status(s)
         if (s = "loading" || s = "vote" || s = "intro" || s = "lobby")
             RS.ready := true                       ; a new match is really starting
-        if (s = "result" || s = "reward" || s = "afterroom" || s = "died")
+        if (s = "loading" || s = "unknown" || s = "vote" || s = "intro")
+            StageCheck(r.t)                        ; stage name (StageWalk)
+        if (s = "result" || s = "reward" || s = "afterroom" || s = "died") {
             RS.ready := false, RS.endAt := A_TickCount ; a match just ended
+            RS.stage := "", RS.stageWalked := false
+        }
         if (s != "ingame" && s != "vote" && closes < 2 && CloseUi()) {
             closes++                               ; closed it - look at the screen again
             continue
@@ -593,6 +598,7 @@ CameraSetup(way := 1) {
 DoVote(r) {
     static tries := 0, lastAt := 0
     if !RS.camVote {                               ; camera first, then start the game
+        StageWalk()                                ; e.g. Magic Hill: move first
         CameraSetup()
         RS.camVote := true
         HillScan()                                 ; where the hills are (before the start)
@@ -1388,6 +1394,9 @@ PlayMatch() {
         Wait(500)
     }
     ReadHotbarCosts()
+    if (RS.stage = "" && !RS.camVote && ReadWave() <= 1) ; no vote screen seen: look for the name here
+        StageCheck(OcrAll().t)
+    StageWalk()                                     ; not done on the vote screen
     if !RS.camVote                                  ; camera was not set on the vote screen
         CameraSetup()
     RS.camVote := false                             ; next match sets it again
@@ -1755,9 +1764,10 @@ HillCands(zone, style, pt0, slot, path, cells) {
     anc := (style = "group") ? GroupAnchor(slot) : ""
     return ScoreCands(pool, style, ps, pt0, anc)
 }
-Walk(k, sec) {
+Walk(k, sec, run := -1) {
     Focus()
-    run := CFG.Get("HillRun", 1) + 0               ; hold Shift = run
+    if (run < 0)
+        run := CFG.Get("HillRun", 1) + 0           ; hold Shift = run
     if run
         Send("{LShift down}")
     Send("{" k " down}")
@@ -1766,6 +1776,32 @@ Walk(k, sec) {
     if run
         Send("{LShift up}")
     Sleep(250)
+}
+; Stage name, read on the loading / vote screens. StageWalk lists stages
+; where the start spot is too far from the path: "Magic Hill=a 3|Other=d 2"
+; = on Magic Hill run A for 3 s before the hill check and the start.
+StageCheck(t) {
+    if (RS.stage != "" || Trim(CFG["StageWalk"]) = "")
+        return
+    tt := RegExReplace(t, "\s+")                  ; OCR may drop or add spaces
+    for e in StrSplit(CFG["StageWalk"], "|") {
+        p := StrSplit(e, "=", " `t", 2)
+        if (p.Length = 2 && p[1] != "" && InStr(tt, RegExReplace(p[1], "\s+"))) {
+            RS.stage := p[1], RS.stageMove := p[2], RS.stageWalked := false
+            Out("Stage: " p[1] " (StageWalk " p[2] ")")
+            return
+        }
+    }
+}
+StageWalk() {
+    if (RS.stage = "" || RS.stageWalked)
+        return
+    RS.stageWalked := true
+    if !RegExMatch(RS.stageMove, "i)^\s*([wasd])\s*([\d.]+)", &mm)
+        return Out("  StageWalk for " RS.stage ": cannot read '" RS.stageMove "' (write it like: a 3)")
+    Out("  " RS.stage ": running " StrUpper(mm[1]) " for " mm[2] " s before the start")
+    Walk(StrLower(mm[1]), mm[2] + 0, 1)
+    Wait(300)
 }
 ; look for hills here; if none, zoom in a little at a time (HillZoomStep
 ; notches, HillZoomTries times). Found after zooming -> keep that zoom.

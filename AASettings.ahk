@@ -33,6 +33,7 @@ global DEF := Map(
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
+    "StageWalk", "Magic Hill=a 3",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -343,13 +344,17 @@ BuildGui() {
         dd.OnEvent("Change", (*) => MarkDirty())
         C.type.Push(dd)
     }
-    G.AddGroupBox("x25 y300 w750 h285", "ทั่วไป / กล้อง / หาเนิน")
+    G.AddGroupBox("x25 y300 w750 h325", "ทั่วไป / กล้อง / หาเนิน")
     AddNum("CamZoom", "ระยะกล้อง (ซูมออกกี่ขีด)", 40, 432, "มาก = ไกล  (0-30, ค่าเริ่มต้น 24)", 420)
     AddNum("HillWalk", "หาเนินไม่เจอ: เดินทางละ", 40, 466, "วินาที (W/D/S/A แล้วเดินกลับที่เดิม)", 420)
     AddNum("HillZoomStep", "ไม่เจอ: ซูมเข้าทีละ", 40, 500, "ขีด", 60)
     AddNum("HillZoomTries", "ซูมเข้าสูงสุด", 400, 500, "ครั้ง", 60)
     C.run := G.AddCheckbox("x40 y538 w700", "กด Shift วิ่งตอนเดินหาเนิน  (เจอเนินหลังซูมเข้า = ใช้ระยะกล้องนั้นต่อไป)")
     C.run.OnEvent("Click", (*) => MarkDirty())
+    G.AddText("x40 y572 w170", "ด่านที่ต้องเดินก่อนเริ่ม")
+    C.stage := G.AddEdit("x215 y568 w400")
+    C.stage.OnEvent("Change", (*) => MarkDirty())
+    G.AddText("x40 y598 w720 cGray", "ชื่อด่าน=ปุ่ม วินาที  คั่นหลายด่านด้วย |   เช่น  Magic Hill=a 3  (เจอชื่อด่านตอนโหลด = วิ่ง A 3 วินาที)")
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
     C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
@@ -977,6 +982,8 @@ LoadSettings() {
             C.avoid.Value := val
         else if (k = "HillRun")
             C.run.Value := (val + 0) ? 1 : 0
+        else if (k = "StageWalk")
+            C.stage.Value := val
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
         else if (SubStr(k, 1, 4) = "Name")
@@ -1006,6 +1013,7 @@ SaveAll(restart) {
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
+        IniWrite(Trim(C.stage.Value), INI, "Settings", "StageWalk")
         IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
         IniWrite(PRESETS[C.preset.Value].key, INI, "Settings", "Preset")
         IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")
