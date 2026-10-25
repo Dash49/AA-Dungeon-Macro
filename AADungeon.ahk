@@ -1685,17 +1685,28 @@ HillLook(slot, &m) {
     before := GreenGrid()
     Key(slot)
     Wait(300)
-    Snap()
-    m := Map(), n := 0
-    for k, gp in GreenGrid()
-        if !before.Has(k) {
-            n++
-            Loop 3 {
-                dx := A_Index - 2
-                Loop 3
-                    m[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
+    Loop 3 {
+        Snap()
+        m := Map(), n := 0
+        for k, gp in GreenGrid()
+            if !before.Has(k) {
+                n++
+                Loop 3 {
+                    dx := A_Index - 2
+                    Loop 3
+                        m[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
+                }
             }
-        }
+        if (n >= 8 || A_Index = 3 || HeldHint())   ; green seen, or the unit is in hand (no hill here)
+            break
+        Focus()                                    ; not in hand: click it on the hotbar, then the key again
+        if (A_Index = 1)
+            ClickRef(746 + (slot - 1) * 84, 1003, "c", "b"), MouseMove(PX(960), PY(120))
+        else
+            Key(slot)
+        Wait(350)
+        Out("  hill check: unit " slot " was not in hand - " (A_Index = 1 ? "clicked it on the hotbar" : "pressed " slot " again"))
+    }
     Key("q")
     Wait(200)
     return n
