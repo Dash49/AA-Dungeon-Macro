@@ -512,7 +512,16 @@ DoLobby(r) {
 }
 
 DoIntro(r) {
-    Out("Dungeon menu - Enter Dungeon")
+    static tries := 0, lastAt := 0
+    tries := (A_TickCount - lastAt < 15000) ? tries + 1 : 1
+    lastAt := A_TickCount
+    if (tries > 6) {                               ; the button does nothing: no key left?
+        Out("Could not enter the dungeon after 6 tries" (RegExMatch(r.t, "i)key") ? " - no Dungeon Key left?" : " - out of Dungeon Keys?")
+            . " Stopping. Get keys, then press F2.")
+        tries := 0
+        Reload()
+    }
+    Out("Dungeon menu - Enter Dungeon" (tries > 1 ? " (try " tries ")" : ""))
     RS.depth := 0, RS.bossDone := false, RS.chestsDone := false
     if Find(r, "Enter Dungeon", &x, &y)
         ClickAt(x, y)
