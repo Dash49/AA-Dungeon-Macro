@@ -1984,14 +1984,14 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             path.Push(pt)
     ; Is the unit really in hand? Held = red path + "Place / Rotate / Cancel"
     ; next to the mouse. Not held (key lost, game not focused): press the
-    ; key again, then click its picture on the hotbar.
+    ; unit's picture on the hotbar, then press the key again.
     if (path.Length < 20 && !HeldHint()) {
         Loop 2 {
             Focus()
-            if (A_Index = 1)
-                Key(slot)
-            else
+            if (A_Index = 1)                        ; click the unit on the hotbar (bottom)
                 ClickRef(746 + (slot - 1) * 84, 1003, "c", "b"), MouseMove(PX(960), PY(120))
+            else
+                Key(slot)
             Wait(300)
             Snap()
             path := []
@@ -1999,7 +1999,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                 if !before.Has(k)
                     path.Push(pt)
             if (path.Length >= 20 || HeldHint()) {
-                Out("  unit " slot " was not in hand - " (A_Index = 1 ? "pressed " slot " again" : "clicked it on the hotbar"))
+                Out("  unit " slot " was not in hand - " (A_Index = 1 ? "clicked it on the hotbar" : "pressed " slot " again"))
                 break
             }
         }
