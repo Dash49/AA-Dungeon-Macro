@@ -92,7 +92,7 @@ LoadConfig() {
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-        "StageWalk", "Magic Hill=a 3|Snowy Town=d 3",
+        "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -102,7 +102,7 @@ LoadConfig() {
         val := IniRead(INI, "Settings", k, "`a")
         if (val = "`a")                            ; new setting - add it to the file
             val := v, IniWrite(v, INI, "Settings", k)
-        else if (k = "StageWalk" && val = "Magic Hill=a 3") ; old default -> add the new maps
+        else if (k = "StageWalk" && (val = "Magic Hill=a 3" || val = "Magic Hill=a 3|Snowy Town=d 3")) ; old default
             val := v, IniWrite(v, INI, "Settings", k)
         CFG[k] := IsNumber(val) ? val + 0 : val
     }
@@ -1823,7 +1823,7 @@ Walk(k, sec, run := -1) {
     Sleep(250)
 }
 ; Stage name, read on the loading / vote screens. StageWalk lists stages
-; where the start spot is too far from the path: "Magic Hill=a 3|Other=d 2"
+; where the start spot is too far from the path: "Magic Hill=a 3 jump|Other=d 2"
 ; = on Magic Hill run A for 3 s before the hill check and the start.
 StageCheck(t) {
     if (RS.stage != "" || Trim(CFG["StageWalk"]) = "")
@@ -1842,11 +1842,31 @@ StageWalk() {
     if (RS.stage = "" || RS.stageWalked)
         return
     RS.stageWalked := true
-    if !RegExMatch(RS.stageMove, "i)^\s*([wasd])\s*([\d.]+)", &mm)
-        return Out("  StageWalk for " RS.stage ": cannot read '" RS.stageMove "' (write it like: a 3)")
-    Out("  " RS.stage ": running " StrUpper(mm[1]) " for " mm[2] " s before the start")
-    Walk(StrLower(mm[1]), mm[2] + 0, 1)
+    if !RegExMatch(RS.stageMove, "i)^\s*([wasd])\s*([\d.]+)\s*(j)?", &mm)
+        return Out("  StageWalk for " RS.stage ": cannot read '" RS.stageMove "' (write it like: a 3 jump)")
+    jump := (mm[3] != "")
+    Out("  " RS.stage ": running " (jump ? "+ jumping " : "") StrUpper(mm[1]) " for " mm[2] " s before the start")
+    if jump
+        RunJump(StrLower(mm[1]), mm[2] + 0)
+    else
+        Walk(StrLower(mm[1]), mm[2] + 0, 1)
     Wait(300)
+}
+; run (Shift) one way and jump (Space) all the time
+RunJump(k, sec) {
+    Focus()
+    Send("{LShift down}")
+    Send("{" k " down}")
+    t := A_TickCount
+    while (A_TickCount - t < sec * 1000) {
+        Send("{Space down}")
+        Sleep(80)
+        Send("{Space up}")
+        Sleep(270)
+    }
+    Send("{" k " up}")
+    Send("{LShift up}")
+    Sleep(250)
 }
 ; look for hills here; if none, zoom in a little at a time (HillZoomStep
 ; notches, HillZoomTries times). Found after zooming -> keep that zoom.
