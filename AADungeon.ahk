@@ -1368,6 +1368,20 @@ PlayMatch() {
             break
         Wait(500)
     }
+    ; right after the vote the picture can still be black (fade-in): wait a
+    ; little for it, so the path shows when the first unit is held
+    Loop 16 {
+        Snap(), lit := 0
+        for pt in [[480, 300], [960, 300], [1440, 300], [480, 700], [960, 700], [1440, 700]] {
+            c := RGB(Color(PX(pt[1]), PY(pt[2])))
+            lit += (Max(c.r, c.g, c.b) > 40)
+        }
+        if (lit >= 2)
+            break
+        if (A_Index = 1)
+            Out("  screen still dark - waiting a moment before placing")
+        Wait(500)
+    }
     ReadHotbarCosts()
     if !RS.camVote                                  ; camera was not set on the vote screen
         CameraSetup()
@@ -1523,6 +1537,7 @@ IsRed(col) {
     return (r > 150 && g < 95 && b < 105 && r - g > 100)    ; red path on most maps
         || (r > 200 && r - g > 80 && g < 150 && r - b > 25)  ; mixed with the ground: pink on ice (Marineford),
                                                              ; salmon on sand/peach ground
+        || (r >= 80 && g < 45 && b < 45 && r - Max(g, b) > 55)   ; dark red on a black floor (Shop room)
 }
 ; red points on the map (ref coords) from the last Snap -> Map(key -> [x, y])
 RedGrid(step := 12) {
