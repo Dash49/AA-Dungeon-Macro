@@ -1237,7 +1237,7 @@ DoChests() {
     if !RS.chestsDone {
         Out("Open chests - opening everything")
         for row in [425, 556] {
-            n := 0
+            n := 0, miss := 0
             Loop 60 {
                 ClickRef(1318, row)
                 got := false
@@ -1248,14 +1248,19 @@ DoChests() {
                         break
                     }
                 }
-                if !got
-                    break
-                n++
+                if !got {                          ; the click can be lost while the last reward fades
+                    if (++miss >= 3)               ; 3 misses in a row = none left
+                        break
+                    Wait(700)
+                    continue
+                }
+                n++, miss := 0
                 Loop 8 {
                     ClickAnywhere()
                     if !InStr(AllText(), "Click anywhere")
                         break
                 }
+                Wait(600)                          ; let the reward close before the next OPEN
             }
             Out("  opened " n (row = 425 ? " treasure" : " rare") " chests")
         }
