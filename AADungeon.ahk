@@ -591,21 +591,45 @@ CameraSetup(way := 1) {
 }
 
 DoVote(r) {
+    static tries := 0, lastAt := 0
     if !RS.camVote {                               ; camera first, then start the game
         CameraSetup()
         RS.camVote := true
         HillScan()                                 ; where the hills are (before the start)
         return
     }
-    if !CFG["AutoVote"]
+    tries := (A_TickCount - lastAt < 8000) ? tries + 1 : 1
+    lastAt := A_TickCount
+    if !CFG["AutoVote"] {
+        if (tries = 1)
+            Out("Vote: AutoVote is off in settings - click Yes yourself")
         return Wait(1000)
+    }
+    ; Yes is the green button left of the red No, under "Vote start"
     for wd in Words(r)
-        if (wd.t = "Yes" && wd.y < WIN.y + WIN.h * 0.35) {
+        if (RegExMatch(wd.t, "i)^\W*Y[e3]s\W*$") && wd.y < WIN.y + WIN.h * 0.35) {
+            if (tries <= 3 || !Mod(tries, 10))
+                Out("Vote: clicking Yes" (tries > 1 ? " (try " tries ")" : ""))
             ClickAt(wd.x, wd.y)
             Wait(800)
             return
         }
-    ClickRef(880, 184, "c", "t")
+    ; not read: click the button by its look (green), else where it normally is
+    Snap()
+    gx := 0, gy := 0
+    for pt in [[830, 184], [930, 184], [860, 184], [900, 178]] {    ; beside the white text
+        c := RGB(Color(PX(pt[1]), PY(pt[2], "t")))
+        if (c.g > 150 && c.r < 140 && c.b < 100) {
+            gx := PX(pt[1]), gy := PY(pt[2], "t")
+            break
+        }
+    }
+    if (tries <= 3 || !Mod(tries, 10))
+        Out("Vote: Yes not read - clicking " (gx ? "the green button" : "where Yes normally is") " (try " tries ")")
+    if gx
+        ClickAt(gx, gy)
+    else
+        ClickRef(880, 184, "c", "t")
     Wait(800)
 }
 
