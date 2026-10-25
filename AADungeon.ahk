@@ -32,7 +32,7 @@ global WIN := {id: 0, x: 0, y: 0, w: 1920, h: 1080, u: 1.0}
 global STATE := {run: false, pause: false, stop: false}
 ; one dungeon run / one match
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
-global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: ""}
+global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false}
 global MT := {}
 global CFG := Map()
 
@@ -499,7 +499,7 @@ Start() {
 
 ; ============================================================ screens
 DoLobby(r) {
-    RS.depth := 0, RS.bossDone := false, RS.chestsDone := false, RS.died := false
+    RS.depth := 0, RS.bossDone := false, RS.chestsDone := false, RS.died := false, RS.toLobby := false
     ; the Dungeon button (bottom of the left button column)
     for wd in Words(r)
         if (wd.t = "Dungeon" && wd.x < WIN.x + WIN.w * 0.25) {
@@ -517,6 +517,12 @@ DoIntro(r) {
     lastAt := A_TickCount
     if (tries = 1)
         reopened := false
+    if RS.toLobby {                                ; still in the dungeon map after a run:
+        Out("Run finished - closing this window and going back to the lobby first")
+        ClickRef(1542, 181)                        ; red X -> "Return to lobby" shows up
+        Wait(2000)
+        return
+    }
     if (tries = 4 && !reopened) {                  ; the button does nothing: close and reopen
         Shot("intro_stuck")
         Out("Enter Dungeon does nothing - closing the dungeon window and opening it again")
@@ -636,7 +642,7 @@ ClickAnywhere() {
 
 DoAfterRoom(r) {
     ; "Return to lobby" / "Open Dungeon" after a room
-    if RS.died {
+    if (RS.died || RS.toLobby) {                   ; a new run starts from the lobby
         Out("Return to lobby")
         if Find(r, "Return to lobby", &x, &y)
             ClickAt(x, y)
@@ -1248,6 +1254,7 @@ DoLeave(r) {
     else
         ClickRef(798, 615)
     RS.depth := 0, RS.bossDone := false, RS.chestsDone := false
+    RS.toLobby := true                             ; the next run can only start from the lobby
     Wait(2500)
     if (CFG["OnFinish"] = "stop") {
         Out("OnFinish=stop")
