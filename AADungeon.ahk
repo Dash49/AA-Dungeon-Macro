@@ -1532,6 +1532,13 @@ WaitYen(cost, timeout) {
 ; While a unit is held the enemy path turns red. Spots are picked at
 ; random a short way off that path (in range, but not on it), so it works
 ; on any map. Placed = the red path goes away (the unit left the hand).
+; the "Place / Rotate / Cancel" hint shown next to the mouse while a unit is held
+HeldHint() {
+    MouseGetPos(&mx, &my)
+    r := OcrRect(mx - 20, my - 40, mx + 300, my + 160, 2)
+    return IsObject(r) && RegExMatch(r.t, "i)Rotate|Cancel")
+}
+
 IsRed(col) {
     r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
     return (r > 150 && g < 95 && b < 105 && r - g > 100)    ; red path on most maps
@@ -1975,6 +1982,28 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     for k, pt in RedGrid()
         if !before.Has(k)
             path.Push(pt)
+    ; Is the unit really in hand? Held = red path + "Place / Rotate / Cancel"
+    ; next to the mouse. Not held (key lost, game not focused): press the
+    ; key again, then click its picture on the hotbar.
+    if (path.Length < 20 && !HeldHint()) {
+        Loop 2 {
+            Focus()
+            if (A_Index = 1)
+                Key(slot)
+            else
+                ClickRef(746 + (slot - 1) * 84, 1003, "c", "b"), MouseMove(PX(960), PY(120))
+            Wait(300)
+            Snap()
+            path := []
+            for k, pt in RedGrid()
+                if !before.Has(k)
+                    path.Push(pt)
+            if (path.Length >= 20 || HeldHint()) {
+                Out("  unit " slot " was not in hand - " (A_Index = 1 ? "pressed " slot " again" : "clicked it on the hotbar"))
+                break
+            }
+        }
+    }
     if (path.Length < 20 && FixFirstPerson())      ; first person hides the path
         return "fail"
     if (path.Length < 20) {                        ; nothing in hand (a real path is long)
