@@ -1697,8 +1697,13 @@ HillLook(slot, &m) {
                         m[(Floor(gp[1] / 14) + dx) * 4096 + Floor(gp[2] / 14) + A_Index - 2] := 1
                 }
             }
-        if (n >= 8 || A_Index = 3 || HeldHint())   ; green seen, or the unit is in hand (no hill here)
+        if (n >= 8 || A_Index = 3)
             break
+        if HeldHint() {                            ; in hand, but the green zones may fade in late: look again
+            Wait(450)
+            Out("  hill check: unit " slot " in hand, only " n " green points yet - looking again")
+            continue
+        }
         Focus()                                    ; not in hand: click it on the hotbar, then the key again
         if (A_Index = 1)
             ClickRef(746 + (slot - 1) * 84, 1003, "c", "b"), MouseMove(PX(960), PY(120))
