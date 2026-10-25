@@ -591,20 +591,30 @@ CameraSetup(way := 1) {
 }
 
 DoVote(r) {
+    static tries := 0, lastAt := 0
     if !RS.camVote {                               ; camera first, then start the game
         CameraSetup()
         RS.camVote := true
         HillScan()                                 ; where the hills are (before the start)
         return
     }
-    if !CFG["AutoVote"]
+    tries := (A_TickCount - lastAt < 8000) ? tries + 1 : 1
+    lastAt := A_TickCount
+    if !CFG["AutoVote"] {
+        if (tries = 1)
+            Out("Vote: AutoVote is off in settings - click Yes yourself")
         return Wait(1000)
+    }
     for wd in Words(r)
-        if (wd.t = "Yes" && wd.y < WIN.y + WIN.h * 0.35) {
+        if (RegExMatch(wd.t, "i)^\W*Yes\W*$") && wd.y < WIN.y + WIN.h * 0.35) {
+            if (tries <= 3 || Mod(tries, 10) = 0)
+                Out("Vote: clicking Yes at " Round(wd.x) "," Round(wd.y) (tries > 1 ? " (try " tries ")" : ""))
             ClickAt(wd.x, wd.y)
             Wait(800)
             return
         }
+    if (tries <= 3 || Mod(tries, 10) = 0)
+        Out("Vote: Yes not read by OCR - clicking where it normally is (try " tries ")")
     ClickRef(880, 184, "c", "t")
     Wait(800)
 }
