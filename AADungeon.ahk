@@ -2235,7 +2235,7 @@ CardLevel(c) {
 ; WheelUp there goes all the way into first person (mouse gets locked).
 OverviewScroll(dir) {
     if IsObject(MT)
-        MT.ncAt := 0                               ; card names moved: read them again
+        MT.ncAt := 0, MT.pn := Map()               ; card names moved: read them again
     ; The list only eats the wheel while it CAN scroll. At its top a WheelUp
     ; goes to the camera instead (zoom in -> first person). So: tiny steps,
     ; look after each one, stop at the end of the list.
@@ -2436,6 +2436,26 @@ NameDist(a, b) {                                   ; edit distance (Lev() above 
     return prev[lb + 1]
 }
 ; the card of unit u found by its slot's name -> card or ""
+; the unit's name as its big panel (left) shows it: click the picture on
+; the card, read the title, close the panel. Kept per card spot.
+PanelName(c, count) {
+    if (!MT.HasOwnProp("pn") || !MT.HasOwnProp("pnN") || MT.pnN != count)
+        MT.pn := Map(), MT.pnN := count
+    key := Round(c.x) "|" Round(c.y)
+    if MT.pn.Has(key)
+        return MT.pn[key]
+    CloseUnitPanel()
+    ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
+    Wait(500)
+    r := OcrRef(20, 325, 295, 400, 2, "l", "c")          ; title only (Upgrade [n] sits right of it)
+    t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
+    CloseUnitPanel()
+    MT.pn[key] := t
+    if (t != "")
+        Out("  card at " Round(c.x) "," Round(c.y) " is " t " (read from its panel)")
+    return t
+}
+
 CardByName(u, nm) {
     k := 0, total := 0                             ; u is copy k of total
     for v in MT.units
@@ -2449,6 +2469,17 @@ CardByName(u, nm) {
         if !r.open
             return ""
         names := CardNames(r.cards)
+        mine := 0
+        for i, c in r.cards
+            mine += (CardSlot(names[i]) = u.slot)
+        if (mine < k) {                            ; small names not enough: ask the big panel
+            for i, c in r.cards
+                if !CardSlot(names[i]) {
+                    t := PanelName(c, r.cards.Length)
+                    if (t != "")
+                        names[i] := t
+                }
+        }
         hits := [], blanks := [], seenN := Map()
         for i, c in r.cards {
             sl := CardSlot(names[i])
