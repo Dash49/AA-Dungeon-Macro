@@ -1685,6 +1685,16 @@ HillLook(slot, &m) {
     before := GreenGrid()
     Key(slot)
     Wait(300)
+    if !HeldHint() {                               ; key lost: click the unit on the hotbar, then the key again
+        Focus()
+        ClickRef(746 + (slot - 1) * 84, 1003, "c", "b"), MouseMove(PX(960), PY(120))
+        Wait(300)
+        if !HeldHint() {
+            Key(slot)
+            Wait(300)
+        }
+        Out("  hill check: unit " slot " was not in hand - " (HeldHint() ? "now held" : "still not held"))
+    }
     Snap()
     m := Map(), n := 0
     for k, gp in GreenGrid()
