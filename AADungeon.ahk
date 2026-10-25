@@ -92,7 +92,7 @@ LoadConfig() {
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-        "StageWalk", "Magic Hill=a 3",
+        "StageWalk", "Magic Hill=a 3|Snowy Town=d 3",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -101,6 +101,8 @@ LoadConfig() {
     for k, v in d {
         val := IniRead(INI, "Settings", k, "`a")
         if (val = "`a")                            ; new setting - add it to the file
+            val := v, IniWrite(v, INI, "Settings", k)
+        else if (k = "StageWalk" && val = "Magic Hill=a 3") ; old default -> add the new maps
             val := v, IniWrite(v, INI, "Settings", k)
         CFG[k] := IsNumber(val) ? val + 0 : val
     }
@@ -962,6 +964,7 @@ EnterTile(t) {
         ClickRef(t.x, 643)
         Wait(800)
         if FindEnter(t.x, &ex, &ey) {
+            RoomMap()                              ; the card names the map (StageWalk)
             ClickAt(ex, ey)
             Wait(400)
             Loop 10 {
@@ -975,6 +978,24 @@ EnterTile(t) {
     return false
 }
 
+; the room card shows the map name under "Dungeon Room" (e.g. Snowy Town)
+RoomMap() {
+    r := OcrAll()
+    if !IsObject(r)
+        return
+    name := "", prev := false
+    for ln in Lines(r) {
+        if prev {
+            name := Trim(ln.t)
+            break
+        }
+        prev := RegExMatch(ln.t, "i)Dungeon\s*Room")
+    }
+    if (name != "")
+        Out("  room map: " name)
+    RS.stage := "", RS.stageWalked := false        ; this card decides it
+    StageCheck(r.t)
+}
 ; the card opens beside the tile; its Enter button is a big bright green bar
 FindEnter(tx, &ex, &ey) {
     Snap()
