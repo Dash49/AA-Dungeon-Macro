@@ -1099,9 +1099,12 @@ DoShop() {
                         it := {name: first, pts: o.pts, op: o.op, lim: o.lim}
             if !IsObject(it)
                 it := {name: first, pts: 0, op: "", lim: 0}
-            if (pass = 1 && txt != "?")                ; remember every item ever seen
-                RecordSeen(it.HasOwnProp("key") && it.key != "other" ? it.name : first,
-                    Trim(RegExReplace(SubStr(rw.txt, StrLen(StrSplit(rw.txt, "`n")[1]) + 1), "\s+", " ")), rw.price)
+            if (pass = 1 && txt != "?") {              ; remember every item ever seen
+                nm := first, ef := Trim(RegExReplace(SubStr(rw.txt, StrLen(StrSplit(rw.txt, "`n")[1]) + 1), "\s+", " "))
+                if (ef = "" && RegExMatch(first, "^(.*?)\s*([+\-—–]\s*\d.*)$", &mm))   ; one line: "Bow +20% Range"
+                    nm := mm[1], ef := mm[2]
+                RecordSeen(it.HasOwnProp("key") && it.key != "other" ? it.name : nm, ef, rw.price)
+            }
             if bought.Has(it.name)
                 continue
             special := RegExMatch(txt, "i)luck|plac\w*\s*cost|cost\w*\s*(of\s*)?plac|deploy\w*\s*cost")
@@ -1494,7 +1497,8 @@ WaitYen(cost, timeout) {
 IsRed(col) {
     r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
     return (r > 150 && g < 95 && b < 105 && r - g > 100)    ; red path on most maps
-        || (r > 200 && r - g > 80 && b >= 120 && r - b > 25) ; on blue / ice maps it shows pink (Marineford)
+        || (r > 200 && r - g > 80 && g < 150 && r - b > 25)  ; mixed with the ground: pink on ice (Marineford),
+                                                             ; salmon on sand/peach ground
 }
 ; red points on the map (ref coords) from the last Snap -> Map(key -> [x, y])
 RedGrid(step := 12) {
