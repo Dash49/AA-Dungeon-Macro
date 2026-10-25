@@ -32,7 +32,7 @@ global WIN := {id: 0, x: 0, y: 0, w: 1920, h: 1080, u: 1.0}
 global STATE := {run: false, pause: false, stop: false}
 ; one dungeon run / one match
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
-global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false, stage: "", stageMove: "", stageWalked: false}
+global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false, stage: "", stageMove: "", stageWalked: false, voteAt: 0}
 global MT := {}
 global CFG := Map()
 
@@ -390,6 +390,10 @@ Screen(&r := "") {
         n += InStr(t, w) ? 1 : 0
     if (n >= 4)
         return "lobby"
+    ; just after the vote the "Wave" text can be missing for a while -
+    ; the yen under the hotbar means the match is on
+    if (RS.voteAt && A_TickCount - RS.voteAt < 90000 && ReadYen() >= 0)
+        return "ingame"
     return "unknown"
 }
 
@@ -445,7 +449,7 @@ Start() {
             StageCheck(r.t)                        ; stage name (StageWalk)
         if (s = "result" || s = "reward" || s = "afterroom" || s = "died") {
             RS.ready := false, RS.endAt := A_TickCount ; a match just ended
-            RS.stage := "", RS.stageWalked := false
+            RS.stage := "", RS.stageWalked := false, RS.voteAt := 0
         }
         if (s != "ingame" && s != "vote" && closes < 2 && CloseUi()) {
             closes++                               ; closed it - look at the screen again
@@ -493,8 +497,9 @@ Start() {
                 Wait(1500)
             case "disconnect": DoDisconnect(r)
             default:
-                if (A_TickCount - since > 25000) {
-                    Out("Unknown screen 25s, text: " SubStr(RegExReplace(IsObject(r) ? r.t : "", "\s+", " "), 1, 160))
+                if (A_TickCount - since > 15000) {
+                    Out("Unknown screen 15s, text: " SubStr(RegExReplace(IsObject(r) ? r.t : "", "\s+", " "), 1, 160))
+                    Shot("unknown")
                     ClickAnywhere()
                     since := A_TickCount
                 }
@@ -607,6 +612,7 @@ DoVote(r) {
     }
     tries := (A_TickCount - lastAt < 8000) ? tries + 1 : 1
     lastAt := A_TickCount
+    RS.voteAt := A_TickCount                       ; the match starts soon (see Screen)
     if !CFG["AutoVote"] {
         if (tries = 1)
             Out("Vote: AutoVote is off in settings - click Yes yourself")
