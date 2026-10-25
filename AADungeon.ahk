@@ -1237,7 +1237,7 @@ DoChests() {
     if !RS.chestsDone {
         Out("Open chests - opening everything")
         for row in [425, 556] {
-            n := 0
+            n := 0, miss := 0
             Loop 60 {
                 ClickRef(1318, row)
                 got := false
@@ -1248,8 +1248,16 @@ DoChests() {
                         break
                     }
                 }
-                if !got
-                    break
+                if !got {
+                    ; the click can be swallowed while the last reward fades out,
+                    ; or OCR misses the text - only give up after 3 misses in a row
+                    miss++
+                    if (miss >= 3)
+                        break
+                    Out("  chest row " row ": no reward screen (miss " miss "/3) - clicking again")
+                    continue
+                }
+                miss := 0
                 n++
                 Loop 8 {
                     ClickAnywhere()
