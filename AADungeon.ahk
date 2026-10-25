@@ -350,6 +350,9 @@ Screen(&r := "") {
     if !IsObject(r)
         return "unknown"
     t := r.t
+    ; Roblox "Disconnected" box first: the game behind it is still on screen
+    if (InStr(t, "Disconnected") || (InStr(t, "Reconnect") && RegExMatch(t, "i)Error\s*Code")))
+        return "disconnect"
     if InStr(t, "Leave Dungeon")
         return "leave"
     if (InStr(t, "Died") && InStr(t, "Depth Reached"))
@@ -376,8 +379,6 @@ Screen(&r := "") {
         return "result"
     if InStr(t, "Open Dungeon")
         return "afterroom"
-    if InStr(t, "Disconnected")
-        return "disconnect"
     if (InStr(t, "Starts in") || InStr(t, "change your units") || (InStr(t, "Yes") && InStr(t, "No") && RegExMatch(t, "\d/\d")))
         return "vote"
     if BoardXVisible()                             ; dungeon panel open, text not read
@@ -688,11 +689,28 @@ DoAfterRoom(r) {
     Wait(1500)
 }
 
+; keep clicking Reconnect until the box is gone ("Reconnect was
+; unsuccessful" often needs many tries)
 DoDisconnect(r) {
-    Out("Disconnected - clicking Reconnect")
-    if Find(r, "Reconnect", &x, &y)
-        ClickAt(x, y)
-    Wait(15000)
+    Out("Disconnected - clicking Reconnect until it works")
+    n := 0
+    Loop 300 {                                     ; ~15 min, then the main loop looks again
+        Focus()
+        if Find(r, "Reconnect", &x, &y)
+            ClickAt(x, y)
+        else
+            ClickRef(1054, 627)                    ; Reconnect = right button of the box
+        n++
+        Wait(3000)
+        r := OcrAll()
+        if !(IsObject(r) && (InStr(r.t, "Disconnected") || InStr(r.t, "Reconnect")))
+            break
+        if (Mod(n, 10) = 0)
+            Out("  still disconnected - Reconnect clicked " n " times")
+    }
+    Out("  Reconnect box gone after " n " clicks - waiting for the game to load")
+    RS.camVote := false, RS.ready := false, RS.stage := "", RS.stageWalked := false
+    Wait(10000)
 }
 
 ; ======================================================== room choice
