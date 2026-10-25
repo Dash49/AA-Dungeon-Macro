@@ -1923,6 +1923,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             c := Color(PX(960), PY(540))
             Out("  unit " slot ": no red path seen after pressing " slot " (" path.Length " points, centre colour "
                 . Format("{:06X}", c) ")")
+            Shot("nopath")                          ; picture of the held unit's path colour, for fixing
         }
         t := OcrRef(300, 520, 1620, 900, 1)
         if (IsObject(t) && RegExMatch(t.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
