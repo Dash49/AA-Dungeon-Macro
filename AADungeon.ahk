@@ -1368,6 +1368,21 @@ PlayMatch() {
             break
         Wait(500)
     }
+    ; right after the vote the picture can still be black (fade-in) - the red path would not show
+    Loop 24 {
+        Snap()
+        lit := 0
+        for pt in [[480, 270], [960, 270], [1440, 270], [480, 540], [960, 540], [1440, 540], [480, 810], [960, 810], [1440, 810]] {
+            c := RGB(Color(PX(pt[1]), PY(pt[2])))
+            if (Max(c.r, c.g, c.b) > 30)
+                lit++
+        }
+        if (lit >= 3)
+            break
+        if (A_Index = 1)
+            Out("  screen is still black - waiting for the game to fade in")
+        Wait(500)
+    }
     ReadHotbarCosts()
     if !RS.camVote                                  ; camera was not set on the vote screen
         CameraSetup()
