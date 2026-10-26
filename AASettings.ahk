@@ -34,7 +34,7 @@ global DEF := Map(
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
-    "Speed", 100,
+    "Speed", 100, "ShopMinPts", 1,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -151,6 +151,18 @@ global SHRINE_KEYS := ["chest", "points", "always", "never"]
 global SHRINE_TH := ["ได้หีบ = รับเสมอ ไม่สนคำสาป (แนะนำ)", "คิดจากคะแนน (หีบ + คำสาป)", "รับทุกครั้ง", "ไม่รับเลย"]
 global SlotNames := ["", "", "", "", "", ""]     ; unit names per hotbar slot (Name1..Name6)
 global SPEEDS := [75, 100, 130, 160, 200]
+; item wish levels shown instead of points (the macro still reads points)
+global LEVELS := [{th: "⭐ ต้องซื้อ", pts: 100, from: 85}, {th: "👍 ดี", pts: 70, from: 55},
+    {th: "🙂 พอใช้", pts: 40, from: 30}, {th: "💤 ถ้าเหลือเหรียญ", pts: 15, from: 1}, {th: "🚫 ไม่ซื้อ", pts: 0, from: -99999}]
+; shop modes = ShopMinPts + ShopBuyAll
+global SHOPMODE_TH := ["⭐ แนะนำ: ซื้อของในรายการ ระดับสูงก่อน", "💰 ประหยัด: ซื้อแค่ ต้องซื้อ / ดี",
+    "🛒 ซื้อทุกอย่างที่เหรียญพอ", "🚫 ไม่ซื้ออะไรเลย", "✏ กำหนดเอง (ตั้งค่าขั้นสูง)"]
+global SHOPMODE_VALS := [[1, 2000], [55, 3000], [1, 0], [9999, 999999]]
+global SHOPMODE_DESC := ["ซื้อตามรายการด้านล่าง ระดับสูงก่อน ถ้าเหรียญเกิน 2000 ซื้อหมดทุกอย่าง",
+    "เก็บเหรียญไว้ ซื้อแค่ของระดับ 'ต้องซื้อ' กับ 'ดี' (และของเพิ่ม luck / ลดค่าวาง) ถ้าเหรียญเกิน 3000 ซื้อหมด",
+    "ซื้อทุกชิ้นในร้านเท่าที่เหรียญพอ ไม่ดูรายการ",
+    "ไม่ซื้ออะไรเลยในร้าน (ผ่านไปกด Continue)",
+    "ตัวเลขถูกแก้เอง ดูที่ '⚙ ตั้งค่าขั้นสูง'"]
 global SPEED_TH := ["ช้า ปลอดภัย (75%)", "ปกติ (100%)", "เร็ว (130%)", "เร็วมาก (160%)", "สุดๆ (200%)"]
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
@@ -302,33 +314,64 @@ BuildGui() {
 
     ; ------------------------------------------------ แท็บ 3: ร้านค้า
     tab.UseTab(3)
-    G.AddText("x25 y45 w750 cGray", "ของที่เขียนว่าเพิ่ม luck / ลด placement cost จะซื้อก่อนเสมอ  ถ้าเหรียญเกิน 'ซื้อทุกอย่าง' จะซื้อหมด")
-    AddNum("ShopBuyAll", "ซื้อทุกอย่างเมื่อเหรียญเกิน", 30, 75)
-    AddNum("ShopRich", "คะแนนห้องร้าน เหรียญเยอะ", 30, 109), AddNum("ShopRichCoins", "เหรียญเยอะ = เกิน", 400, 109)
-    AddNum("ShopMid", "คะแนนห้องร้าน เหรียญกลาง", 30, 143), AddNum("ShopMidCoins", "เหรียญกลาง = เกิน", 400, 143)
-    AddNum("ShopPoor", "คะแนนห้องร้าน เหรียญน้อย", 30, 177)
-    C.ilv := G.AddListView("x25 y212 w530 h215 -Multi Grid", ["ชื่อไอเทม", "คะแนน", "เหรียญเกิน", "ผลของไอเทม"])
-    C.ilv.ModifyCol(1, 150), C.ilv.ModifyCol(2, 55), C.ilv.ModifyCol(3, 75), C.ilv.ModifyCol(4, 225)
+    G.AddText("x25 y45 w90", "แบบการซื้อ")
+    C.smode := G.AddDropDownList("x115 y41 w380", SHOPMODE_TH)
+    C.smode.OnEvent("Change", (*) => ShopModeApply())
+    C.sadv := G.AddButton("x605 y40 w170", "⚙ ตั้งค่าขั้นสูง")
+    C.sadv.OnEvent("Click", (*) => ShopAdvToggle())
+    C.sdesc := G.AddText("x25 y72 w750 cGray", "")
+    G.AddText("x25 y98 w750", "ของที่อยากได้  (ดับเบิลคลิก = เปลี่ยนระดับ   ของที่เพิ่ม luck / ลดค่าวาง ซื้อก่อนเสมอ   ระดับเท่ากัน = บนก่อน)")
+    C.ilv := G.AddListView("x25 y120 w530 h250 -Multi Grid", ["ชื่อไอเทม", "ระดับ", "ซื้อเมื่อเหรียญเกิน", "ผลของไอเทม"])
+    C.ilv.ModifyCol(1, 150), C.ilv.ModifyCol(2, 105), C.ilv.ModifyCol(3, 95), C.ilv.ModifyCol(4, 160)
     C.ilv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Items.Length) ? FillItem(Items[row]) : 0)
-    G.AddText("x570 y215 w200", "ชื่อไอเทม (ตรงกับในเกม)")
-    C.iname := G.AddEdit("x570 y237 w205")
-    G.AddText("x570 y272 w95", "คะแนน")
-    C.iscore := G.AddEdit("x670 y268 w105", 30)
-    G.AddText("x570 y306 w95", "เหรียญเกิน")
-    C.imin := G.AddEdit("x670 y302 w105 Number", 0)
-    G.AddText("x570 y332 w205 cGray", "(0 = ซื้อได้ตลอด)`n'Other' = ของที่ไม่อยู่ในรายการ")
-    G.AddButton("x570 y380 w100", "+ เพิ่ม").OnEvent("Click", (*) => ItemAdd(false))
-    G.AddButton("x675 y380 w100", "✎ แก้").OnEvent("Click", (*) => ItemAdd(true))
-    G.AddButton("x570 y415 w100", "ลบ").OnEvent("Click", (*) => ItemDelete())
-    G.AddButton("x675 y415 w48", "▲").OnEvent("Click", (*) => ItemMove(-1))
-    G.AddButton("x727 y415 w48", "▼").OnEvent("Click", (*) => ItemMove(1))
-    G.AddButton("x570 y450 w205", "⭐ ใช้รายการแนะนำ").OnEvent("Click", (*) => ItemsRecommended())
+    C.ilv.OnEvent("DoubleClick", (ctl, row) => ItemLevelMenu(row))
+    G.AddText("x570 y120 w205", "ชื่อไอเทม (ตรงกับในเกม)")
+    C.iname := G.AddEdit("x570 y140 w205")
+    G.AddText("x570 y172 w205", "ระดับ")
+    C.ilevel := G.AddDropDownList("x570 y192 w205 Choose2", LevelNames())
+    G.AddText("x570 y226 w205", "ซื้อเมื่อเหรียญเกิน  (0 = ตลอด)")
+    C.imin := G.AddEdit("x570 y246 w205 Number", 0)
+    G.AddButton("x570 y280 w100", "+ เพิ่ม").OnEvent("Click", (*) => ItemAdd(false))
+    G.AddButton("x675 y280 w100", "✎ แก้").OnEvent("Click", (*) => ItemAdd(true))
+    G.AddButton("x570 y313 w100", "ลบ").OnEvent("Click", (*) => ItemDelete())
+    G.AddButton("x675 y313 w48", "▲").OnEvent("Click", (*) => ItemMove(-1))
+    G.AddButton("x727 y313 w48", "▼").OnEvent("Click", (*) => ItemMove(1))
+    G.AddButton("x570 y346 w205", "⭐ ใช้รายการแนะนำ").OnEvent("Click", (*) => ItemsRecommended())
     ; items the shop has shown (items_seen.txt, written by the macro)
-    G.AddText("x25 y437 w530", "ของที่มาโครเคยเห็นในร้าน  (คลิกแล้วกด '← ใช้ชื่อนี้' เพื่อเพิ่มเข้ารายการซื้อ)")
-    C.slv := G.AddListView("x25 y458 w530 h165 -Multi Grid", ["ชื่อ", "ผล", "ราคา", "ในรายการ"])
-    C.slv.ModifyCol(1, 140), C.slv.ModifyCol(2, 230), C.slv.ModifyCol(3, 55), C.slv.ModifyCol(4, 70)
-    G.AddButton("x570 y490 w205", "← ใช้ชื่อนี้").OnEvent("Click", (*) => SeenToItem())
-    G.AddButton("x570 y525 w205", "รีเฟรชรายการที่เห็น").OnEvent("Click", (*) => LoadSeen())
+    C.basic := []
+    C.basic.Push(G.AddText("x25 y382 w530", "ของที่มาโครเคยเห็นในร้าน  (ดับเบิลคลิก = เพิ่มเข้ารายการ)"))
+    C.slv := G.AddListView("x25 y402 w530 h220 -Multi Grid", ["ชื่อ", "ผล", "ราคา", "ในรายการ"])
+    C.slv.ModifyCol(1, 140), C.slv.ModifyCol(2, 215), C.slv.ModifyCol(3, 55), C.slv.ModifyCol(4, 95)
+    C.slv.OnEvent("DoubleClick", (ctl, row) => SeenToItem(row))
+    C.basic.Push(C.slv)
+    btn := G.AddButton("x570 y420 w205", "← เพิ่มตัวที่เลือก")
+    btn.OnEvent("Click", (*) => SeenToItem(C.slv.GetNext()))
+    C.basic.Push(btn)
+    btn := G.AddButton("x570 y455 w205", "รีเฟรชรายการที่เห็น")
+    btn.OnEvent("Click", (*) => LoadSeen())
+    C.basic.Push(btn)
+    ; advanced numbers (hidden until '⚙ ตั้งค่าขั้นสูง')
+    C.adv := [G.AddGroupBox("x25 y380 w750 h245", "ขั้นสูง")]
+    for ctl in AddNum("ShopBuyAll", "ซื้อทุกอย่างเมื่อเหรียญเกิน", 40, 405)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopMinPts", "ซื้อเฉพาะคะแนนตั้งแต่", 400, 405, "1 = ทุกระดับ", 95)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopRich", "คะแนนห้องร้าน เหรียญเยอะ", 40, 445)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopRichCoins", "เหรียญเยอะ = เกิน", 400, 445)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopMid", "คะแนนห้องร้าน เหรียญกลาง", 40, 479)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopMidCoins", "เหรียญกลาง = เกิน", 400, 479)
+        C.adv.Push(ctl)
+    for ctl in AddNum("ShopPoor", "คะแนนห้องร้าน เหรียญน้อย", 40, 513)
+        C.adv.Push(ctl)
+    C.adv.Push(G.AddText("x40 y555 w720 cGray", "ระดับ = คะแนน: ต้องซื้อ 100, ดี 70, พอใช้ 40, ถ้าเหลือเหรียญ 15, ไม่ซื้อ 0`n"
+        . "คะแนนห้องร้าน = อยากเข้าห้อง Shop แค่ไหน (ใช้ตอนเลือกห้อง ขึ้นกับเหรียญที่มี)"))
+    for ctl in C.adv
+        ctl.Visible := false
+    for k in ["ShopBuyAll", "ShopMinPts"]
+        E[k].OnEvent("Change", (*) => ShopModeShow())
 
     ; ------------------------------------------- แท็บ 4: ราคา / ทั่วไป
     tab.UseTab(4)
@@ -405,11 +448,13 @@ BuildGui() {
 }
 
 AddNum(key, label, x, y, tip := "", tipW := 100) {
-    G.AddText("x" x " y" (y + 4) " w190", label)
+    ctls := [G.AddText("x" x " y" (y + 4) " w190", label)]
     E[key] := G.AddEdit("x" (x + 195) " y" y " w80")
     E[key].OnEvent("Change", (*) => MarkDirty())
+    ctls.Push(E[key])
     if (tip != "")
-        G.AddText("x" (x + 282) " y" (y + 4) " w" tipW " cGray", tip)
+        ctls.Push(G.AddText("x" (x + 282) " y" (y + 4) " w" tipW " cGray", tip))
+    return ctls
 }
 
 MarkDirty() {
@@ -886,10 +931,23 @@ ItemEffect(name) {
     return (k = "other") ? "ของที่ไม่อยู่ในรายการ" : ""
 }
 
+LevelNames() {
+    a := []
+    for lv in LEVELS
+        a.Push(lv.th)
+    return a
+}
+LevelOf(score) {
+    for i, lv in LEVELS
+        if (score >= lv.from)
+            return i
+    return LEVELS.Length
+}
 RefreshItems(sel := 0) {
     C.ilv.Delete()
     for it in Items
-        C.ilv.Add(, it.name, it.score, it.min > 0 ? it.min : "-", ItemEffect(it.name))
+        C.ilv.Add(, (StrLower(it.name) = "other") ? "Other (ของอื่นทั้งหมด)" : it.name, LEVELS[LevelOf(it.score)].th,
+            it.min > 0 ? it.min : "-", ItemEffect(it.name))
     if (sel >= 1 && sel <= Items.Length)
         C.ilv.Modify(sel, "Select Focus Vis")
 }
@@ -931,34 +989,95 @@ RefreshSeen() {
         C.slv.Add(, sv.name, sv.eff, sv.price, inList)
     }
 }
-SeenToItem() {
-    if !(row := C.slv.GetNext()) {
+; a seen item -> straight into the buy list (level from the item database)
+SeenToItem(row) {
+    global Dirty
+    if (row < 1 || row > Seen.Length) {
         MsgBox("คลิกเลือกของในรายการที่เห็นก่อน", "AA Dungeon", "Icon!")
         return
     }
-    sv := Seen[row]
-    C.iname.Value := sv.name
-    pts := 30
+    sv := Seen[row], k := RegExReplace(StrLower(sv.name), "[^a-z]")
+    for i, it in Items
+        if (RegExReplace(StrLower(it.name), "[^a-z]") = k) {
+            RefreshItems(i)
+            C.status.Text := sv.name " อยู่ในรายการแล้ว (" LEVELS[LevelOf(it.score)].th ") - ดับเบิลคลิกเพื่อเปลี่ยนระดับ"
+            return
+        }
+    pts := 70
     for d in ITEMDB
-        if (RegExReplace(StrLower(d.name), "[^a-z]") = RegExReplace(StrLower(sv.name), "[^a-z]"))
+        if (RegExReplace(StrLower(d.name), "[^a-z]") = k)
             pts := d.pts
-    C.iscore.Value := pts, C.imin.Value := 0
-    C.status.Text := "ใส่ชื่อ " sv.name " แล้ว - ปรับคะแนนแล้วกด '+ เพิ่ม'"
+    pos := Items.Length + 1                         ; above "Other"
+    for i, it in Items
+        if (StrLower(it.name) = "other")
+            pos := i
+    Items.InsertAt(pos, {name: sv.name, score: pts, min: 0})
+    Dirty := true
+    RefreshItems(pos)
+    RefreshSeen()
+    C.status.Text := "เพิ่ม " sv.name " (" LEVELS[LevelOf(pts)].th ") แล้ว - ดับเบิลคลิกเพื่อเปลี่ยนระดับ แล้วกดบันทึก"
+}
+; shop mode: shown from ShopMinPts + ShopBuyAll, picking one sets them
+ShopModeShow() {
+    mp := IsNumber(E["ShopMinPts"].Value) ? E["ShopMinPts"].Value + 0 : 1
+    ba := IsNumber(E["ShopBuyAll"].Value) ? E["ShopBuyAll"].Value + 0 : 2000
+    i := (mp >= 9999) ? 4 : (ba <= 0) ? 3 : (mp >= 55) ? 2 : (mp <= 1) ? 1 : 5
+    C.smode.Value := i
+    C.sdesc.Text := SHOPMODE_DESC[i]
+}
+ShopModeApply() {
+    i := C.smode.Value
+    if (i >= 1 && i <= SHOPMODE_VALS.Length)
+        E["ShopMinPts"].Value := SHOPMODE_VALS[i][1], E["ShopBuyAll"].Value := SHOPMODE_VALS[i][2]
+    MarkDirty()
+    ShopModeShow()
+    if (i = 5)
+        ShopAdvToggle(true)
+}
+ShopAdvToggle(show := "") {
+    if (show = "")
+        show := !C.adv[1].Visible
+    for ctl in C.adv
+        ctl.Visible := show
+    for ctl in C.basic
+        ctl.Visible := !show
+    C.sadv.Text := show ? "📋 กลับไปรายการที่เห็น" : "⚙ ตั้งค่าขั้นสูง"
 }
 
 FillItem(it) {
-    C.iname.Value := it.name, C.iscore.Value := it.score, C.imin.Value := it.min
+    C.iname.Value := it.name, C.ilevel.Value := LevelOf(it.score), C.imin.Value := it.min
+}
+; double-click an item: pick its level from a small menu
+ItemLevelMenu(row) {
+    if (row < 1 || row > Items.Length)
+        return
+    m := Menu()
+    for i, lv in LEVELS
+        m.Add(lv.th, ItemSetLevel.Bind(row, i))
+    m.Check(LEVELS[LevelOf(Items[row].score)].th)
+    m.Show()
+}
+ItemSetLevel(row, lvl, *) {
+    global Dirty
+    Items[row].score := LEVELS[lvl].pts
+    Dirty := true
+    RefreshItems(row)
+    RefreshSeen()
+    C.status.Text := Items[row].name " = " LEVELS[lvl].th " - กดบันทึก"
 }
 
 ItemAdd(replace) {
     global Dirty
     name := Trim(StrReplace(StrReplace(C.iname.Value, "|", ""), "=", ""))
-    if (name = "" || !IsNumber(Trim(C.iscore.Value))) {
-        MsgBox("ใส่ชื่อไอเทมและคะแนน (ตัวเลข)", "AA Dungeon", "Icon!")
+    if (name = "") {
+        MsgBox("ใส่ชื่อไอเทมก่อน", "AA Dungeon", "Icon!")
         return
     }
-    it := {name: name, score: Trim(C.iscore.Value) + 0, min: IsInteger(C.imin.Value) ? Integer(C.imin.Value) : 0}
+    lvl := C.ilevel.Value ? C.ilevel.Value : 2
+    it := {name: name, score: LEVELS[lvl].pts, min: IsInteger(C.imin.Value) ? Integer(C.imin.Value) : 0}
     row := C.ilv.GetNext()
+    if (replace && row && LevelOf(Items[row].score) = lvl)
+        it.score := Items[row].score                   ; same level: keep its exact points
     if replace {
         if !row {
             MsgBox("คลิกเลือกไอเทมที่จะแก้ก่อน", "AA Dungeon", "Icon!")
@@ -1149,6 +1268,7 @@ LoadSettings() {
     Filling := false
     RefreshItems()
     LoadSeen()
+    ShopModeShow()
     RefreshNames()
     RefreshStages()
     LoadMapsSeen()

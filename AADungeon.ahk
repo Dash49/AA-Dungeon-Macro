@@ -100,7 +100,7 @@ LoadConfig() {
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
-        "Speed", 100, "ShotScreens", 0,
+        "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -1138,7 +1138,7 @@ ItemTable() {
     res_ := []
     for line in StrSplit(CFG["Items"], "|") {
         if RegExMatch(Trim(line), "^(.+?)\s*=\s*(-?\d+)(?:\s*(>=|<=|>|<)\s*(\d+))?$", &m)
-            res_.Push({name: Trim(m[1]), key: StrLower(RegExReplace(m[1], "[^A-Za-z]")), pts: Integer(m[2]), op: m[3], lim: m[4] != "" ? Integer(m[4]) : 0})
+            res_.Push({name: Trim(m[1]), key: StrLower(RegExReplace(m[1], "[^A-Za-z]")), pts: Integer(m[2]), op: m[3], lim: m[4] != "" ? Integer(m[4]) : 0, idx: res_.Length + 1})
     }
     return res_
 }
@@ -1306,9 +1306,9 @@ DoShop() {
             if !IsObject(it)
                 for o in ItemTable()
                     if (o.key = "other")
-                        it := {name: first, pts: o.pts, op: o.op, lim: o.lim}
+                        it := {name: first, pts: o.pts, op: o.op, lim: o.lim, idx: o.idx}
             if !IsObject(it)
-                it := {name: first, pts: 0, op: "", lim: 0}
+                it := {name: first, pts: 0, op: "", lim: 0, idx: 999}
             if (pass = 1 && txt != "?") {              ; remember every item ever seen
                 nm := first, ef := Trim(RegExReplace(SubStr(rw.txt, StrLen(StrSplit(rw.txt, "`n")[1]) + 1), "\s+", " "))
                 if (ef = "" && RegExMatch(first, "^(.*?)\s*([+\-—–]\s*\d.*)$", &mm))   ; one line: "Bow +20% Range"
@@ -1323,7 +1323,8 @@ DoShop() {
                 ok := true, pts := Max(pts, 500), why := " [luck/place cost]"
             if rich
                 ok := true, pts := Max(pts, 1), why .= " [rich]"
-            offers.Push({name: it.name, pts: pts, ok: ok, price: rw.price, x: rw.x, y: rw.y, why: why})
+            offers.Push({name: it.name, pts: pts, ok: ok, price: rw.price, x: rw.x, y: rw.y, why: why,
+                idx: it.HasOwnProp("idx") ? it.idx : 999})
         }
         if (A_Index = 1) {
             sx := ""
@@ -1331,9 +1332,10 @@ DoShop() {
                 sx .= o.name "=" o.pts " $" o.price (o.ok ? "" : " (no)") o.why "  "
             Out("  offers: " (sx != "" ? sx : "none read"))
         }
-        pick := ""
-        for o in offers
-            if (o.ok && o.pts > 0 && (coins < 0 || o.price <= coins) && (!IsObject(pick) || o.pts > pick.pts))
+        pick := "", minPts := Max(1, CFG.Get("ShopMinPts", 1) + 0)   ; F8 shop mode
+        for o in offers                            ; best points; same points = higher in the list
+            if (o.ok && o.pts >= minPts && (coins < 0 || o.price <= coins)
+                && (!IsObject(pick) || o.pts > pick.pts || (o.pts = pick.pts && o.idx < pick.idx)))
                 pick := o
         if !IsObject(pick)
             break
