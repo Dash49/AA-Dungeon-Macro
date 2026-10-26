@@ -33,7 +33,7 @@ global DEF := Map(
     "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-    "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump",
+    "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -72,6 +72,8 @@ global PLACE_DESC := Map("near", "ชิดทางเดิน", "far", "ไ�
     "cover", "ตรงโค้ง/จุดที่ทางผ่านเยอะ", "center", "กลางจอ")
 global PickResult := ""
 global Seen := []                ; items the shop has shown (items_seen.txt)
+global Stages := []              ; maps to walk on before the start {name, moves} (StageWalk)
+global MapsSeen := []            ; map names the macro has seen (maps_seen.txt)
 ; known dungeon shop items (from the game wiki + shop pictures): name, effect, suggested points
 global ITEMDB := [
     {name: "Mask of Riches", eff: "-50% ค่าวาง/อัปเกรด", pts: 100},
@@ -179,7 +181,7 @@ BuildGui() {
     G := Gui("+MinSize800x720", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
-    tab := G.AddTab3("x10 y10 w780 h625", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป"])
+    tab := G.AddTab3("x10 y10 w780 h625", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป", "ด่าน (เดินก่อนเริ่ม)"])
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
@@ -351,16 +353,39 @@ BuildGui() {
     AddNum("HillZoomTries", "ซูมเข้าสูงสุด", 400, 500, "ครั้ง", 60)
     C.run := G.AddCheckbox("x40 y538 w700", "กด Shift วิ่งตอนเดินหาเนิน  (เจอเนินหลังซูมเข้า = ใช้ระยะกล้องนั้นต่อไป)")
     C.run.OnEvent("Click", (*) => MarkDirty())
-    G.AddText("x40 y572 w170", "ด่านที่ต้องเดินก่อนเริ่ม")
-    C.stage := G.AddEdit("x215 y568 w400")
-    C.stage.OnEvent("Change", (*) => MarkDirty())
-    G.AddText("x40 y598 w720 cGray", "ชื่อด่าน=ปุ่ม วินาที  คั่นหลายด่านด้วย |   เช่น  Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1  (jump = กระโดดด้วย, คั่นหลายท่าด้วย ,)")
+    G.AddText("x40 y575 w720 cGray", "ด่านที่ต้องวิ่ง/กระโดดก่อนเริ่ม (เช่น Magic Hill, Snowy Town) ตั้งได้ในแท็บ 'ด่าน (เดินก่อนเริ่ม)'")
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
     C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
     C.finish := G.AddDropDownList("x215 y396 w250", ["เริ่มดันเจี้ยนใหม่ (again)", "หยุดมาโคร (stop)"])
     for ctl in [C.save, C.vote, C.finish]
         ctl.OnEvent(ctl.Type = "DDL" ? "Change" : "Click", (*) => MarkDirty())
+
+    ; ------------------------------------- แท็บ 5: ด่าน (เดินก่อนเริ่ม)
+    tab.UseTab(5)
+    G.AddText("x25 y45 w750 cGray", "เจอชื่อด่านนี้ (การ์ดห้อง / หน้าโหลด) = กด Shift วิ่งตามท่าข้างล่างก่อนเช็คเนินและกดโหวต  ทำครั้งเดียวต่อห้อง")
+    C.mlv := G.AddListView("x25 y70 w530 h230 -Multi Grid", ["ชื่อด่าน", "การเดิน (ทำตามลำดับ)"])
+    C.mlv.ModifyCol(1, 190), C.mlv.ModifyCol(2, 320)
+    C.mlv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Stages.Length) ? (C.mname.Value := Stages[row].name, C.mmoves.Value := Stages[row].moves) : 0)
+    G.AddText("x570 y70 w205", "ชื่อด่าน (ตรงกับในเกม)")
+    C.mname := G.AddEdit("x570 y92 w205")
+    G.AddText("x570 y124 w205", "การเดิน  (เช่น d 3 jump, w 1)")
+    C.mmoves := G.AddEdit("x570 y146 w205")
+    C.mdir := G.AddDropDownList("x570 y182 w95 Choose4", ["W (หน้า)", "A (ซ้าย)", "S (หลัง)", "D (ขวา)"])
+    C.msec := G.AddEdit("x670 y182 w45", 3)
+    G.AddText("x720 y186 w55", "วินาที")
+    C.mjump := G.AddCheckbox("x570 y214 w205 Checked", "กระโดดไปด้วย")
+    G.AddButton("x570 y238 w205", "+ ใส่ท่านี้ต่อท้าย").OnEvent("Click", (*) => StageAddMove())
+    G.AddButton("x570 y275 w100", "+ เพิ่มด่าน").OnEvent("Click", (*) => StageSave(false))
+    G.AddButton("x675 y275 w100", "✎ แก้").OnEvent("Click", (*) => StageSave(true))
+    G.AddButton("x570 y310 w100", "ลบ").OnEvent("Click", (*) => StageDelete())
+    G.AddButton("x675 y310 w100", "ล้างท่า").OnEvent("Click", (*) => (C.mmoves.Value := ""))
+    G.AddText("x25 y318 w530", "ด่านที่มาโครเคยเห็น (หน้าโหลด 'Travelling to...')  คลิกแล้วกด '← ใช้ชื่อนี้'")
+    C.vlv := G.AddListView("x25 y340 w530 h280 -Multi Grid", ["ชื่อด่าน", "ตั้งการเดินแล้ว"])
+    C.vlv.ModifyCol(1, 250), C.vlv.ModifyCol(2, 260)
+    G.AddButton("x570 y360 w205", "← ใช้ชื่อนี้").OnEvent("Click", (*) => MapToStage())
+    G.AddButton("x570 y395 w205", "รีเฟรชรายการที่เห็น").OnEvent("Click", (*) => LoadMapsSeen())
+    G.AddText("x570 y435 w205 cGray", "W = เดินหน้า  S = ถอยหลัง`nA = ซ้าย  D = ขวา`n(ตามมุมกล้องตอนเริ่มด่าน)`n`nกด 'บันทึก' ด้านล่างเมื่อแก้เสร็จ")
 
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
@@ -957,9 +982,125 @@ ItemMove(d) {
     RefreshItems(to)
 }
 
+; ============================================================ maps (StageWalk)
+ParseStages(str) {
+    res := []
+    for e in StrSplit(str, "|") {
+        p := StrSplit(e, "=", " `t", 2)
+        if (p.Length = 2 && p[1] != "")
+            res.Push({name: p[1], moves: p[2]})
+    }
+    return res
+}
+StagesString() {
+    out := ""
+    for st in Stages
+        out .= (out != "" ? "|" : "") st.name "=" st.moves
+    return out
+}
+; "d 3 jump, w 1" -> cleaned text, or "" if a part is wrong
+CleanMoves(txt) {
+    out := ""
+    for mv in StrSplit(txt, ",") {
+        if (Trim(mv) = "")
+            continue
+        if !RegExMatch(mv, "i)^\s*([wasd])\s*(\d+(?:\.\d+)?)\s*(j\w*)?\s*$", &m)
+            return ""
+        out .= (out != "" ? ", " : "") StrLower(m[1]) " " m[2] (m[3] != "" ? " jump" : "")
+    }
+    return out
+}
+RefreshStages(sel := 0) {
+    C.mlv.Delete()
+    for st in Stages
+        C.mlv.Add(, st.name, st.moves)
+    if (sel >= 1 && sel <= Stages.Length)
+        C.mlv.Modify(sel, "Select Focus Vis")
+    RefreshMapsSeen()
+}
+StageAddMove() {
+    sec := Trim(C.msec.Value)
+    if !(IsNumber(sec) && sec > 0 && sec <= 20) {
+        MsgBox("วินาทีต้องเป็นตัวเลข 0.1 - 20", "AA Dungeon", "Icon!")
+        return
+    }
+    mv := SubStr("wasd", C.mdir.Value, 1) " " sec (C.mjump.Value ? " jump" : "")
+    C.mmoves.Value := (Trim(C.mmoves.Value) != "" ? Trim(C.mmoves.Value) ", " : "") mv
+}
+StageSave(edit) {
+    global Dirty
+    name := Trim(StrReplace(StrReplace(C.mname.Value, "|"), "="))
+    moves := CleanMoves(C.mmoves.Value)
+    if (name = "") {
+        MsgBox("ใส่ชื่อด่านก่อน", "AA Dungeon", "Icon!")
+        return
+    }
+    if (moves = "") {
+        MsgBox("การเดินไม่ถูก  เขียนแบบ  d 3 jump, w 1  (ปุ่ม w/a/s/d + วินาที + jump ถ้าจะกระโดด)`nหรือใช้ปุ่ม '+ ใส่ท่านี้ต่อท้าย'", "AA Dungeon", "Icon!")
+        return
+    }
+    row := C.mlv.GetNext()
+    if (edit && !row) {
+        MsgBox("คลิกเลือกด่านในรายการที่จะแก้ก่อน", "AA Dungeon", "Icon!")
+        return
+    }
+    if !edit {                                     ; same name already there -> update it
+        for i, st in Stages
+            if (StrLower(st.name) = StrLower(name))
+                row := i, edit := true
+    }
+    if edit
+        Stages[row] := {name: name, moves: moves}
+    else
+        Stages.Push({name: name, moves: moves}), row := Stages.Length
+    Dirty := true
+    RefreshStages(row)
+}
+StageDelete() {
+    global Dirty
+    if !(row := C.mlv.GetNext()) {
+        MsgBox("คลิกเลือกด่านที่จะลบก่อน", "AA Dungeon", "Icon!")
+        return
+    }
+    Stages.RemoveAt(row)
+    Dirty := true
+    RefreshStages()
+}
+LoadMapsSeen() {
+    global MapsSeen
+    MapsSeen := []
+    f := A_ScriptDir "\maps_seen.txt"
+    if FileExist(f)
+        for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r")
+            if (Trim(ln) != "")
+                MapsSeen.Push(Trim(ln))
+    RefreshMapsSeen()
+}
+RefreshMapsSeen() {
+    C.vlv.Delete()
+    for nm in MapsSeen {
+        set := "-"
+        for st in Stages
+            if (RegExReplace(StrLower(st.name), "[^a-z]") = RegExReplace(StrLower(nm), "[^a-z]"))
+                set := "✔ " st.moves
+        C.vlv.Add(, nm, set)
+    }
+}
+MapToStage() {
+    if !(row := C.vlv.GetNext()) {
+        MsgBox("คลิกเลือกด่านในรายการที่เห็นก่อน", "AA Dungeon", "Icon!")
+        return
+    }
+    C.mname.Value := MapsSeen[row]
+    C.mmoves.Value := ""
+    for st in Stages
+        if (StrLower(st.name) = StrLower(MapsSeen[row]))
+            C.mmoves.Value := st.moves
+}
+
 ; ============================================================ settings
 LoadSettings() {
-    global Items, Filling
+    global Items, Filling, Stages
     Filling := true
     for k, v in DEF {
         val := IniRead(INI, "Settings", k, v)
@@ -983,7 +1124,7 @@ LoadSettings() {
         else if (k = "HillRun")
             C.run.Value := (val + 0) ? 1 : 0
         else if (k = "StageWalk")
-            C.stage.Value := val
+            Stages := ParseStages(val)
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
         else if (SubStr(k, 1, 4) = "Name")
@@ -995,6 +1136,8 @@ LoadSettings() {
     RefreshItems()
     LoadSeen()
     RefreshNames()
+    RefreshStages()
+    LoadMapsSeen()
 }
 
 SaveAll(restart) {
@@ -1013,7 +1156,7 @@ SaveAll(restart) {
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
-        IniWrite(Trim(C.stage.Value), INI, "Settings", "StageWalk")
+        IniWrite(StagesString(), INI, "Settings", "StageWalk")
         IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
         IniWrite(PRESETS[C.preset.Value].key, INI, "Settings", "Preset")
         IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")

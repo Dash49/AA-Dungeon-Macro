@@ -96,7 +96,7 @@ LoadConfig() {
         "Type1", "ground", "Type2", "ground", "Type3", "ground", "Type4", "ground", "Type5", "ground", "Type6", "ground",
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
-        "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump",
+        "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -106,9 +106,16 @@ LoadConfig() {
         val := IniRead(INI, "Settings", k, "`a")
         if (val = "`a")                            ; new setting - add it to the file
             val := v, IniWrite(v, INI, "Settings", k)
-        else if (k = "StageWalk" && (val = "Magic Hill=a 3" || val = "Magic Hill=a 3|Snowy Town=d 3" || val = "Magic Hill=a 3 jump|Snowy Town=d 3 jump")) ; old default
+        else if (k = "StageWalk" && (val = "Magic Hill=a 3" || val = "Magic Hill=a 3|Snowy Town=d 3" || val = "Magic Hill=a 3 jump|Snowy Town=d 3 jump"
+            || val = "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump")) ; old default
             val := v, IniWrite(v, INI, "Settings", k)
         CFG[k] := IsNumber(val) ? val + 0 : val
+    }
+    if (IniRead(INI, "Settings", "StageWalkVer", 0) + 0 < 2) {   ; once: add the new map to an edited list
+        if !InStr(CFG["StageWalk"], "Haunted Academy")
+            CFG["StageWalk"] := Trim(CFG["StageWalk"] "|Haunted Academy=d 3 jump", "|")
+        IniWrite(CFG["StageWalk"], INI, "Settings", "StageWalk")
+        IniWrite(2, INI, "Settings", "StageWalkVer")
     }
 }
 
@@ -476,6 +483,8 @@ Start() {
         Status(s)
         if (s = "loading" || s = "vote" || s = "intro" || s = "lobby")
             RS.ready := true                       ; a new match is really starting
+        if (s = "loading")
+            LoadingMap(r)                          ; "Travelling to... <map>"
         if (s = "loading" || s = "unknown" || s = "vote" || s = "intro")
             StageCheck(r.t)                        ; stage name (StageWalk)
         if (s = "result" || s = "reward" || s = "afterroom" || s = "died") {
@@ -1024,6 +1033,36 @@ RoomMap() {
         Out("  room map: " name)
     RS.stage := "", RS.stageWalked := false        ; this card decides it
     StageCheck(r.t)
+}
+; map names compared as letters only, I = l (the card font mixes them up)
+MapKey(t) => StrLower(RegExReplace(StrReplace(t, "I", "l", true), "[^A-Za-z]"))
+; the loading screen: "Travelling to..." then the map name in big letters
+LoadingMap(r) {
+    static last := ""
+    prev := false
+    for ln in Lines(r) {
+        if prev {
+            name := Trim(RegExReplace(ln.t, "\s+", " "))
+            if (name != last && RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$")) {
+                last := name
+                Out("  map: " name)
+                MapSeen(name)
+            }
+            return
+        }
+        prev := RegExMatch(ln.t, "i)Travel+ing\s*to")
+    }
+}
+; every map name seen goes to maps_seen.txt (F8 > ด่าน lists them)
+MapSeen(name) {
+    f := A_ScriptDir "\maps_seen.txt"
+    try {
+        old := FileExist(f) ? FileRead(f, "UTF-8") : ""
+        for ln in StrSplit(old, "`n", "`r")
+            if (MapKey(ln) = MapKey(name))
+                return
+        FileAppend(name "`n", f, "UTF-8")
+    }
 }
 ; the card opens beside the tile; its Enter button is a big bright green bar
 FindEnter(tx, &ex, &ey) {
@@ -1858,10 +1897,10 @@ Walk(k, sec, run := -1) {
 StageCheck(t) {
     if (RS.stage != "" || Trim(CFG["StageWalk"]) = "")
         return
-    tt := RegExReplace(t, "\s+")                  ; OCR may drop or add spaces
+    tt := MapKey(t)                                ; OCR may drop spaces or read l as I
     for e in StrSplit(CFG["StageWalk"], "|") {
         p := StrSplit(e, "=", " `t", 2)
-        if (p.Length = 2 && p[1] != "" && InStr(tt, RegExReplace(p[1], "\s+"))) {
+        if (p.Length = 2 && MapKey(p[1]) != "" && InStr(tt, MapKey(p[1]))) {
             RS.stage := p[1], RS.stageMove := p[2], RS.stageWalked := false
             Out("Stage: " p[1] " (StageWalk " p[2] ")")
             return
