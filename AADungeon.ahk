@@ -3179,13 +3179,29 @@ Census() {
     full := (r.cards.Length < 7)                   ; the whole list fits on the screen
     aligned := false
     if !full {                                     ; only 8 show: scroll to the end, read the rest
-        if !OverviewScroll("WheelDown")
-            Out("  card list: did not scroll down")
-        else {
+        Loop 2 {
+            if (A_Index = 2) {                     ; the list ignored the wheel: click a card picture
+                c1 := r.cards[r.cards.Length]      ; first (that wakes it up), then scroll again
+                PanelTitle(c1)
+                MT.ovOk := false
+                r := OverviewRead()
+                if !(r.open && r.cards.Length) || !OvSync(&r)
+                    break
+            }
+            if !OverviewScroll("WheelDown") {
+                Out("  card list: did not scroll down")
+                continue
+            }
             Wait(300)
             r2 := OverviewRead()
-            if (r2.open && r2.cards.Length)
-                aligned := BottomCards(r2)
+            if !(r2.open && r2.cards.Length)
+                continue
+            if (Abs(r2.cards[1].y - r.cards[1].y) < 4 && MT.units.Length > r.cards.Length) {
+                Out("  card list: the wheel did not move it" (A_Index = 1 ? " - clicking a card first" : ""))
+                continue
+            }
+            aligned := BottomCards(r2)
+            break
         }
     }
     N := 0
@@ -3373,7 +3389,7 @@ CheckPlaced() {
 ; 1..current-1. A step that is fully done is marked and never checked
 ; again; one that is not (a unit not placed, a level not reached) gets
 ; one action now if the yen allows. true = something was done.
-CatchUp() {
+CatchUp(need := 0) {
     static busy := false
     if (busy || !MT.HasOwnProp("stepIdx"))
         return false
@@ -3384,64 +3400,118 @@ CatchUp() {
             i := A_Index, st := MT.planSteps[i]
             if (st.HasOwnProp("done") && st.done)
                 continue
+            if (need > 0 && ReadYen() >= need)    ; the current task can be paid: back to it
+                break
             if (st.k = "place") {
-                have := 0
-                for v in MT.units
-                    have += (v.slot = st.slot)
-                if (have >= st.n || MT.capped.Has(st.slot)) {
-                    st.done := true
-                    continue
-                }
-                y := ReadYen()
-                if (y >= 0 && y < CFG["Cost" st.slot])
-                    continue
-                st.tries := (st.HasOwnProp("tries") && st.tries != "" ? st.tries : 0) + 1
-                if (st.tries > 5) {                ; tried enough this match
-                    st.done := true
-                    Out("  saving phase: step " i " (" st.text ") - could not place more, leaving it")
-                    continue
-                }
-                Out("  saving phase: step " i " (" st.text ") has " have "/" st.n " - placing")
-                if (PlaceAny(st.slot, st.HasOwnProp("style") ? st.style : "random",
-                    (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : "")) = "ok") {
-                    did := true
+                did := CatchPlace(i, st)
+                if did
                     break
-                }
             } else if (st.k = "upgrade") {
-                if !(st.HasOwnProp("want") && IsObject(st.want)) {
-                    st.done := true                ; never ran (or nothing to do)
-                    continue
-                }
-                pending := []
-                for u, w in st.want {
-                    found := false
-                    for v in MT.units
-                        found := found || (v = u)
-                    if (found && !u.maxed && u.lvl < w)
-                        pending.Push(u)
-                }
-                if !pending.Length {
-                    st.done := true
-                    Out("  saving phase: step " i " (" st.text ") is done")
-                    continue
-                }
-                pick := pending[1]
-                for u in pending
-                    if (u.lvl < pick.lvl)
-                        pick := u
-                r := UpgradeOnce(pick)
-                if (r = "ok") {
-                    Out("  saving phase: step " i ": unit " pick.slot " #" pick.n
-                        . (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
-                    did := true
+                did := CatchUpgrade(i, st, need)
+                if did
                     break
-                }
             } else
                 st.done := true                    ; skills / waits run once
         }
     }
     busy := false
     return did
+}
+; place step i: are its units really there (cards counted one by one)?
+; Missing ones are forgotten and placed again. true = placed one
+CatchPlace(i, st) {
+    if (MT.capped.Has(st.slot) || MT.HasOwnProp("noReplace") && MT.noReplace.Has(st.slot)) {
+        st.done := true
+        return false
+    }
+    want := 0                                      ; this unit, all place steps up to this one
+    Loop i
+        if (MT.planSteps[A_Index].k = "place" && MT.planSteps[A_Index].slot = st.slot)
+            want += MT.planSteps[A_Index].n
+    mine := []
+    for v in MT.units
+        if (v.slot = st.slot)
+            mine.Push(v)
+    have := mine.Length, how := "counted by the macro"
+    if (SlotName(st.slot) != "" && Census()) {     ; real cards, one by one
+        have := 0, how := "cards in Unit Overview"
+        for idx, e in MT.cn
+            have += (e.slot = st.slot)
+        while (mine.Length > have) {               ; placed only in the macro's head: forget them
+            v := mine.Pop()
+            for k, w in MT.units
+                if (w = v) {
+                    MT.units.RemoveAt(k)
+                    break
+                }
+        }
+    }
+    if (have >= want) {
+        st.done := true
+        Out("  saving phase: step " i " (" st.text ") checked: " have "/" want " " how " - ok")
+        return false
+    }
+    st.tries := (st.HasOwnProp("tries") && st.tries != "" ? st.tries : 0) + 1
+    if (st.tries > 5) {
+        st.done := true
+        Out("  saving phase: step " i " (" st.text ") - could not place more, leaving it")
+        return false
+    }
+    y := ReadYen()
+    if (y >= 0 && y < CFG["Cost" st.slot])
+        return false
+    Out("  saving phase: step " i " (" st.text ") has " have "/" want " (" how ") - placing")
+    return PlaceAny(st.slot, st.HasOwnProp("style") ? st.style : "random",
+        (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : "")) = "ok"
+}
+; upgrade step i: open each target's panel once and read its real level,
+; then give the first one that is behind one level. true = upgraded one
+CatchUpgrade(i, st, need) {
+    if !(st.HasOwnProp("want") && IsObject(st.want)) {
+        st.done := true                            ; never ran (or nothing to do)
+        return false
+    }
+    pending := []
+    for u, w in st.want {
+        here := false
+        for v in MT.units
+            here := here || (v = u)
+        if !here
+            continue
+        if (!u.HasOwnProp("chk") || u.chk != i) && SlotName(u.slot) != "" {   ; look at the real level
+            if (need > 0 && ReadYen() >= need)
+                return false                       ; back to the current task
+            c := CardOf(u)
+            if IsObject(c) {
+                p := PanelOf(u, c)
+                if (IsObject(p) && (p.name = "" || NameScore(p.name, SlotName(u.slot)) >= 0.6)) {
+                    if (p.lvl >= 0)
+                        u.lvl := p.lvl
+                    u.maxed := p.max
+                    u.chk := i
+                }
+            }
+        }
+        if (!u.maxed && u.lvl < w)
+            pending.Push(u)
+    }
+    CloseUnitPanel(), MT.panelFor := ""
+    if !pending.Length {
+        st.done := true
+        Out("  saving phase: step " i " (" st.text ") checked - done")
+        return false
+    }
+    pick := pending[1]
+    for u in pending
+        if (u.lvl < pick.lvl)
+            pick := u
+    r := UpgradeOnce(pick)
+    if (r = "ok") {
+        Out("  saving phase: step " i ": unit " pick.slot " #" pick.n
+            . (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
+        return true
+    }
+    return false
 }
 
 ; skill used on a unit that fuses (Vego + Carrot -> Fused Hero)?
@@ -3715,7 +3785,7 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
         } else if (r = "poor") {
             if (A_TickCount - lastCatch > 3000) {  ; saving: finish earlier steps meanwhile
                 lastCatch := A_TickCount
-                if CatchUp()
+                if CatchUp(pick.HasOwnProp("needYen") ? pick.needYen : 0)
                     continue
             }
             if (SlotName(pick.slot) = "")
