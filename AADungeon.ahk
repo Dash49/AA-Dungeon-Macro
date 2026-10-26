@@ -100,7 +100,7 @@ LoadConfig() {
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
-        "Speed", 100,
+        "Speed", 100, "ShotScreens", 0,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -519,6 +519,8 @@ Start() {
         if (s != last) {
             Out("Screen: " s)
             last := s, since := A_TickCount, unkShot := false
+            if RegExMatch(s, "^(route|shrine|shop|chests|result|afterroom|leave|intro|died|disconnect|vote|reward)$")
+                ShotUi(s)                          ; ShotScreens=1: picture of every dungeon screen
         }
         Status(s)
         if (s = "loading" || s = "vote" || s = "intro" || s = "lobby")
@@ -1072,6 +1074,7 @@ RoomMap() {
     }
     if (name != "")
         Out("  room map: " name)
+    ShotUi("room")                                 ; the room card that is about to be entered
     RS.stage := "", RS.stageWalked := false        ; this card decides it
     StageCheck(r.t)
 }
@@ -1204,12 +1207,14 @@ PriceOk(it, price, coins := -1) {
 }
 
 ; save a PNG of the Roblox window to AAMacro\shots\<name>_<time>.png
-Shot(name) {
+; sub != "": quiet JPG in shots\<sub>, named time first (sorts by time)
+Shot(name, sub := "") {
     static gdip := 0
     try {
-        dir := A_ScriptDir "\shots"
+        dir := A_ScriptDir "\shots" (sub != "" ? "\" sub : "")
         DirCreate(dir)
-        file := dir "\" name "_" FormatTime(, "yyyyMMdd_HHmmss") ".png"
+        file := (sub != "") ? dir "\" FormatTime(, "yyyyMMdd_HHmmss") "_" A_MSec "_" name ".jpg"
+            : dir "\" name "_" FormatTime(, "yyyyMMdd_HHmmss") ".png"
         w := WIN.w, h := WIN.h
         hdcS := DllCall("GetDC", "ptr", 0, "ptr")
         hdcM := DllCall("CreateCompatibleDC", "ptr", hdcS, "ptr")
@@ -1227,13 +1232,32 @@ Shot(name) {
         pBmp := 0
         DllCall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr", hbm, "ptr", 0, "ptr*", &pBmp)
         clsid := Buffer(16)
-        DllCall("ole32\CLSIDFromString", "wstr", "{557CF406-1A04-11D3-9A73-0000F81EF32E}", "ptr", clsid)
+        enc := (sub != "") ? "{557CF401-1A04-11D3-9A73-0000F81EF32E}" : "{557CF406-1A04-11D3-9A73-0000F81EF32E}"  ; JPG : PNG
+        DllCall("ole32\CLSIDFromString", "wstr", enc, "ptr", clsid)
         DllCall("gdiplus\GdipSaveImageToFile", "ptr", pBmp, "wstr", file, "ptr", clsid, "ptr", 0)
         DllCall("gdiplus\GdipDisposeImage", "ptr", pBmp)
         DllCall("DeleteObject", "ptr", hbm)
-        Out("  picture saved: shots\" name "_" FormatTime(, "yyyyMMdd_HHmmss") ".png")
+        if (sub = "")
+            Out("  picture saved: shots\" name "_" FormatTime(, "yyyyMMdd_HHmmss") ".png")
     } catch as e {
         Out("  picture failed: " e.Message)
+    }
+}
+
+; ShotScreens=1 (settings.ini only, not in F8): a JPG of every dungeon
+; screen in shots\ui. Only the newest 500 are kept.
+ShotUi(name) {
+    static n := 0
+    if !CFG.Get("ShotScreens", 0)
+        return
+    Shot(name, "ui")
+    if (Mod(++n, 25) = 0) {
+        dir := A_ScriptDir "\shots\ui", all := ""
+        Loop Files dir "\*.jpg"
+            all .= A_LoopFileName "`n"
+        arr := StrSplit(Sort(RTrim(all, "`n")), "`n")
+        Loop arr.Length - 500
+            try FileDelete(dir "\" arr[A_Index])
     }
 }
 
