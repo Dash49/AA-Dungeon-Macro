@@ -519,7 +519,7 @@ Start() {
         if (s != last) {
             Out("Screen: " s)
             last := s, since := A_TickCount, unkShot := false
-            if RegExMatch(s, "^(route|shrine|shop|chests|result|afterroom|leave|intro|died|disconnect|vote|reward)$")
+            if RegExMatch(s, "^(shrine|shop|chests|result|afterroom|leave|intro|died|disconnect|vote|reward)$")
                 ShotUi(s)                          ; ShotScreens=1: picture of every dungeon screen
         }
         Status(s)
@@ -1043,11 +1043,14 @@ DoRoute() {
             . (ah != "" ? " > [" ah "]" : "") " = " Round(t.score, 1)
     }
     Out("Depth " r.depth "/" r.max "  coins " r.coins "  " txt)
+    bl := ""
     if list.Length {
         b := list[1]
-        Out("  best route: " (b.labels.Length ? Join(b.labels) : "Normal")
-            . (b.next.Length ? " -> " Join(b.next) : "") "  (" b.chests " chest" (b.chests = 1 ? "" : "s") ")")
+        bl := "best route: " (b.labels.Length ? Join(b.labels) : "Normal")
+            . (b.next.Length ? " -> " Join(b.next) : "") "  (" b.chests " chest" (b.chests = 1 ? "" : "s") ")"
+        Out("  " bl)
     }
+    ShotRoute(r.depth, "Depth " r.depth "/" r.max "  coins " r.coins "  " txt, bl)   ; ShotScreens=1 only
     for t in list {
         if EnterTile(t) {
             Out("Entered " (t.labels.Length ? Join(t.labels) : "Normal") " room")
@@ -1261,26 +1264,38 @@ Shot(name, sub := "") {
         DllCall("DeleteObject", "ptr", hbm)
         if (sub = "")
             Out("  picture saved: shots\" name "_" FormatTime(, "yyyyMMdd_HHmmss") ".png")
+        return file
     } catch as e {
         Out("  picture failed: " e.Message)
     }
+    return ""
 }
 
 ; ShotScreens=1 (settings.ini only, not in F8): a JPG of every dungeon
 ; screen in shots\ui. Only the newest 500 are kept.
-ShotUi(name) {
-    static n := 0
+ShotUi(name, sub := "ui", keep := 500) {
+    static n := Map()
     if !CFG.Get("ShotScreens", 0)
-        return
-    Shot(name, "ui")
-    if (Mod(++n, 25) = 0) {
-        dir := A_ScriptDir "\shots\ui", all := ""
+        return ""
+    f := Shot(name, sub)
+    n[sub] := n.Get(sub, 0) + 1
+    if (Mod(n[sub], 25) = 0) {
+        dir := A_ScriptDir "\shots\" sub, all := ""
         Loop Files dir "\*.jpg"
             all .= A_LoopFileName "`n"
         arr := StrSplit(Sort(RTrim(all, "`n")), "`n")
-        Loop arr.Length - 500
+        Loop arr.Length - keep
             try FileDelete(dir "\" arr[A_Index])
     }
+    return f
+}
+; room board pictures in shots\route + what was read and chosen (routes.txt)
+ShotRoute(depth, read, best) {
+    f := ShotUi("d" depth "_route", "route", 2000)
+    if (f = "")
+        return
+    SplitPath(f, &fn)
+    try FileAppend(fn "`n  " read "`n  " best "`n", A_ScriptDir "\shots\route\routes.txt", "UTF-8")
 }
 
 ; Shop rules, strongest first:
