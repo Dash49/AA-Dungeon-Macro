@@ -50,6 +50,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Old card ↔ slot way: if `Name<slot>` is set, `CardByName()` OCRs the names under the portraits
   (`CardNames`, cached 3 s) and matches them (`NameMatch`, fuzzy). Without a name it guesses from card order
   (slot high→low), which is often wrong – the game does not always sort that way.
+- Upgrades of named units go through the unit panel (`UpgradeByPanel`): click the card picture, read the
+  big name (must match), `Upgrade [n]`, `(MAX)`, the price on the big button (`PanelInfo`), click it only when
+  the yen is enough, check the level went up. Unnamed units use the card button (`UpgradeByCard`).
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
   `OverviewScroll` scrolls one notch at a time – an extra wheel notch at the list end zooms the
   camera into first person (a classic bug). `FixFirstPerson()` repairs that.

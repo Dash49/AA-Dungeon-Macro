@@ -1356,10 +1356,13 @@ DoShop() {
                 continue
             special := RegExMatch(txt, "i)luck|plac\w*\s*cost|cost\w*\s*(of\s*)?plac|deploy\w*\s*cost")
             ok := PriceOk(it, rw.price, coins), pts := it.pts, why := ""
+            never := it.HasOwnProp("key") && it.key != "other" && it.pts <= 0   ; set to "don't buy"
             if special
                 ok := true, pts := Max(pts, 500), why := " [luck/place cost]"
             if rich
                 ok := true, pts := Max(pts, 1), why .= " [rich]"
+            if never
+                ok := false, pts := 0, why := " [don't buy]"
             offers.Push({name: it.name, pts: pts, ok: ok, price: rw.price, x: rw.x, y: rw.y, why: why,
                 idx: it.HasOwnProp("idx") ? it.idx : 999})
         }
@@ -3298,9 +3301,121 @@ FuseCheck(u) {
     }
 }
 
-; one level for unit u: "ok" "max" "poor" "lost"
-; The bar under the card decides everything: lit segments = level.
+; one level for unit u: "ok" "max" "poor" "lost" "retry"
+; Named units: through the unit panel on the left (big name + level +
+; price, checked before clicking). Others: the card's own Upg button.
 UpgradeOnce(u) {
+    if (SlotName(u.slot) != "")
+        return UpgradeByPanel(u)
+    return UpgradeByCard(u)
+}
+
+; read the open unit panel -> {name, lvl, max, cost, bx, by} or ""
+PanelInfo() {
+    r := OcrRef(0, 300, 600, 720, 2, "l", "c")
+    if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
+        return ""
+    t := RegExReplace(r.t, "\s+", " ")
+    p := {name: "", lvl: -1, max: false, cost: -1, bx: 0, by: 0}
+    tr := OcrRef(20, 315, 290, 410, 2, "l", "c")             ; the big title
+    p.name := IsObject(tr) ? Trim(RegExReplace(tr.t, "\s+", " ")) : ""
+    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OoIl]{1,2})\s*[\])\}|l1]", &m)
+        p.lvl := Integer(RegExReplace(RegExReplace(m[1], "[Oo]", "0"), "[Il]", "1"))
+    p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") > 0
+    if RegExMatch(t, "i)Upgrade\s*:\s*([\d][\d,. ]*)", &m)
+        p.cost := Integer(RegExReplace(m[1], "\D"))
+    best := ""
+    for w in Words(r)                              ; the big button = the lowest "Upgrade" word
+        if (RegExMatch(w.t, "i)^upgrade") && (!IsObject(best) || w.y > best.y))
+            best := w
+    if (IsObject(best) && best.y > PY(520))
+        p.bx := best.x, p.by := best.y
+    else if (!p.max && RegExMatch(t, "i)\bMax\b"))
+        p.max := true                              ; button says Max
+    return p
+}
+; the unit panel of card c: click its picture (unless that panel is open)
+PanelOf(u, c) {
+    Snap()
+    if !(MT.HasOwnProp("panelFor") && MT.panelFor = u && UnitPanelVisible()) {
+        CloseUnitPanel()
+        ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
+        Wait(450)
+    }
+    MT.panelFor := u
+    p := PanelInfo()
+    if !IsObject(p) {
+        Wait(350)
+        p := PanelInfo()
+    }
+    return p
+}
+UpgradeByPanel(u) {
+    nm := SlotName(u.slot)
+    if (u.HasOwnProp("needYen") && u.needYen > 0) {  ; still saving: no need to open anything
+        y := ReadYen()
+        if (y >= 0 && y < u.needYen) {
+            Status("saving yen for unit " u.slot " (" nm "): " y "/" u.needYen)
+            return "poor"
+        }
+    }
+    c := CardOf(u)
+    if !IsObject(c)
+        return "lost"
+    p := PanelOf(u, c)
+    if !IsObject(p) {                              ; panel not readable: the card button
+        CloseUnitPanel(), MT.panelFor := ""
+        return UpgradeByCard(u)
+    }
+    if (p.name != "" && NameScore(p.name, nm) < 0.6) {
+        CloseUnitPanel(), MT.panelFor := ""
+        u.wrong := (u.HasOwnProp("wrong") ? u.wrong : 0) + 1
+        Out("  unit " u.slot " #" u.n ": that card is " p.name ", not " nm " - reading the cards again")
+        MT.cnGen := "", MT.cenGen := ""            ; name every card again
+        if (u.wrong >= 4) {
+            Out("  unit " u.slot " #" u.n ": its card can't be found - skipping it")
+            u.maxed := true
+            return "lost"
+        }
+        return "retry"
+    }
+    if p.max {
+        u.maxed := true, u.needYen := 0
+        Out("  unit " u.slot " #" u.n " (" nm ") is MAX" (p.lvl >= 0 ? " (" p.lvl ")" : ""))
+        return "max"
+    }
+    if (p.lvl >= 0)
+        u.lvl := p.lvl
+    y := ReadYen()
+    if (p.cost > 0 && y >= 0 && y < p.cost) {      ; not enough yen yet: don't click
+        u.needYen := p.cost
+        Status("saving yen for unit " u.slot " (" nm "): " y "/" p.cost)
+        return "poor"
+    }
+    u.needYen := 0
+    if !p.by
+        return "poor"                              ; no Upgrade button seen
+    ClickAt(p.bx, p.by)
+    Wait(400)
+    p2 := PanelInfo()
+    if (IsObject(p2) && (p2.max || (p.lvl >= 0 && p2.lvl > p.lvl))) {
+        u.lvl := p2.max ? Max(u.lvl + 1, p2.lvl) : p2.lvl, u.bad := 0
+        if p2.max
+            u.maxed := true
+        return "ok"
+    }
+    if (p.lvl < 0) {                               ; level not readable: give up after a while
+        u.bad := (u.HasOwnProp("bad") ? u.bad : 0) + 1
+        if (u.bad >= 6) {
+            Out("  unit " u.slot " #" u.n ": its level can't be read - skipping it")
+            u.maxed := true
+        }
+    }
+    return "poor"
+}
+
+; The bar under the card decides everything: lit segments = level.
+UpgradeByCard(u) {
     c := CardOf(u)
     if !IsObject(c)
         return "lost"
@@ -3340,6 +3455,11 @@ UpgradeOnce(u) {
 
 ; goal: "max", a level number, or "plus" (+plus levels from now)
 UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
+    r := UpgradeSteps(slots, goal, plus, style, untilWave, timeout)
+    CloseUnitPanel(), MT.panelFor := ""            ; the unit panel stays open while upgrading
+    return r
+}
+UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
     CheckPlaced()                                  ; plan vs. cards: place missing ones again
     us := []
     for s in slots
@@ -3388,14 +3508,15 @@ UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
                     pick := u
         r := UpgradeOnce(pick)
         if (r = "ok")
-            Out("  unit " pick.slot " #" pick.n " -> level " pick.lvl)
+            Out("  unit " pick.slot " #" pick.n (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
         else if (r = "lost") {
             if FixFirstPerson()                     ; that was the reason - try again
                 continue
             Out("  unit " pick.slot " #" pick.n ": card not found in Unit Overview")
             pick.maxed := true                      ; give up on it
         } else if (r = "poor") {
-            Status("saving yen for unit " pick.slot)
+            if (SlotName(pick.slot) = "")
+                Status("saving yen for unit " pick.slot)
             Wait(700)
         }
     }
