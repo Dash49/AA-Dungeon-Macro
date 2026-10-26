@@ -3410,8 +3410,10 @@ CatchUp(need := 0) {
                 did := CatchUpgrade(i, st, need)
                 if did
                     break
+            } else if (st.k = "auto") {
+                CatchAuto(i, st)
             } else
-                st.done := true                    ; skills / waits run once
+                st.done := true                    ; skill presses can't be counted afterwards; waits run once
         }
     }
     busy := false
@@ -3463,6 +3465,33 @@ CatchPlace(i, st) {
     Out("  saving phase: step " i " (" st.text ") has " have "/" want " (" how ") - placing")
     return PlaceAny(st.slot, st.HasOwnProp("style") ? st.style : "random",
         (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : "")) = "ok"
+}
+; auto step i: the unit's auto switch must say On (turn it on if not)
+CatchAuto(i, st) {
+    st.done := true                                ; looked at once
+    u := ""
+    for v in MT.units
+        if (v.slot = st.slot) {
+            u := v
+            break
+        }
+    if !IsObject(u)
+        return
+    r := OpenPanel(u)
+    if !IsObject(r)
+        return
+    if !AutoSwitch(r, &x, &y, &on) {
+        CloseUnitPanel()
+        return
+    }
+    if on
+        Out("  saving phase: step " i " (" st.text ") checked: auto is on - ok")
+    else {
+        ClickAt(x, y)
+        Out("  saving phase: step " i " (" st.text ") auto was OFF - turned it on")
+        Wait(300)
+    }
+    CloseUnitPanel(), MT.panelFor := ""
 }
 ; upgrade step i: open each target's panel once and read its real level,
 ; then give the first one that is behind one level. true = upgraded one

@@ -57,6 +57,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   and stops as soon as the yen covers the current task. `CatchPlace`: real card count (census) vs. all place steps of
   that unit so far – phantom units are forgotten and placed again. `CatchUpgrade`: each target's panel is opened once
   (`u.chk`) for its real level/MAX, then one level for the furthest behind. Checked steps get `st.done` (reset each match).
+  `CatchAuto`: auto switch must be On (turned on if not). Skill presses (`ability`) can't be counted later - not rechecked.
   Census: if the wheel does not move the list, a card picture is clicked first (wakes the list) and it scrolls again. Census bottom part: `BottomCards()` lines the
   bottom cards up with the top ones by unit (not by pixels); `CheckPlaced()` counts twice before re-placing.
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
