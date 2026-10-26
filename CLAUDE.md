@@ -40,7 +40,14 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   or, in "wide" mode with the overview closed, the yen dropped. After 3 failed card checks
   for a slot it trusts the red path (`MT.fake`).
   Hill units with no green on screen walk W/D/S/A (`HillWalk` s) and always walk back.
-- Card ↔ slot: if `Name<slot>` is set, `CardOf()` → `CardByName()` OCRs the names under the portraits
+- Card census (named slots, `CardOf()` → `CardByIdx()`): every card gets a number in the WHOLE list
+  (`CardIdx`, scroll offset `MT.ovOff` measured in `OverviewScroll` via `ListShift`, reset to 0 at the top)
+  and a name read once per "generation" (`CensusGen`: unit count + fusions): the small card name if it fits
+  a unit name exactly, else the big panel title (`PanelTitle`). `CheckPlaced()` (start of every upgrade step)
+  re-places units that have no card. `FuseCheck()` after a skill: Vego + Carrot -> "Fused Hero" (`FUSIONS`),
+  the clicked unit's slot then means the Fused Hero card, the partner is removed and never re-placed.
+  If the list position is lost, `CardByIdx` returns "?" and the old way below is used.
+- Old card ↔ slot way: if `Name<slot>` is set, `CardByName()` OCRs the names under the portraits
   (`CardNames`, cached 3 s) and matches them (`NameMatch`, fuzzy). Without a name it guesses from card order
   (slot high→low), which is often wrong – the game does not always sort that way.
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).

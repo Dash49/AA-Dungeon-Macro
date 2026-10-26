@@ -34,6 +34,9 @@ global STATE := {run: false, pause: false, stop: false, hb: 0}
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
 global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false, stage: "", stageMove: "", stageWalked: false, voteAt: 0}
 global MT := {}
+; two units that fuse when the skill of one of them is used: [a, b, result]
+; (the one whose skill was used becomes the result, the other one is gone)
+global FUSIONS := [["Vego", "Carrot", "Fused Hero"]]
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
@@ -2351,7 +2354,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             n := 1
             for v in MT.units
                 n += (v.slot = slot) ? 1 : 0
-            MT.units.Push({slot: slot, n: n, x: c.x, y: c.y, lvl: 0, maxed: false})
+            MT.units.Push({slot: slot, n: n, x: c.x, y: c.y, lvl: 0, maxed: false, style: style, pt: pt0})
             MT.good.Push({x: c.x, y: c.y})
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
                 MT.lastGroup := {x: c.x, y: c.y}
@@ -2388,6 +2391,7 @@ OverviewOpen() {
     if r.open
         return r
     Focus()
+    MT.ovOk := false                               ; just opened: where the list stands is unknown
     Key("f")
     Wait(700)
     r := OverviewRead()
@@ -2581,9 +2585,11 @@ OverviewScroll(dir) {
         return false
     topY := PY(244)                                ; Upg button of the top row when at the top
     Loop 12 {
-        if (dir = "WheelUp" && Abs(b[1].y - topY) < 12 * WIN.u)
+        if (dir = "WheelUp" && Abs(b[1].y - topY) < 12 * WIN.u) {
+            MT.ovOff := 0, MT.ovOk := true         ; at the top: list position known
             return true                            ; already at the top - no wheel at all
-        before := b[b.Length].y
+        }
+        before := b[b.Length].y, prev := b
         Click dir
         Wait(160)
         Snap()
@@ -2595,6 +2601,11 @@ OverviewScroll(dir) {
                 ZoomOutKeys(2)
             return true
         }
+        d := ListShift(prev, b, dir)               ; how far the list moved (card numbers)
+        if (d = "")
+            MT.ovOk := false
+        else if MT.HasOwnProp("ovOff")
+            MT.ovOff += d
     }
     return true
 }
@@ -2871,8 +2882,10 @@ CardByName(u, nm) {
 
 CardOf(u) {
     nm := Trim(CFG.Get("Name" u.slot, ""))
-    if (nm != "")                                  ; named slot: find the card by its name
-        return CardByName(u, nm)
+    if (nm != "") {                                ; named slot: find the card by its name
+        c := CardByIdx(u)                          ; every card numbered + named once
+        return (c = "?") ? CardByName(u, nm) : c   ; "?" = list not readable: old way
+    }
     order := []
     for v in MT.units {
         i := order.Length + 1
@@ -2903,6 +2916,286 @@ CardOf(u) {
         r := OverviewRead()
     }
     return (idx <= r.cards.Length) ? r.cards[idx] : ""
+}
+
+; ------------------------------------------------- card census
+; Every card in Unit Overview gets a fixed number (1 = top left, 2 = top
+; right, ...) from its place in the WHOLE list - also when the list is
+; scrolled (the scroll is measured) - and a name, read once: the small
+; name under the picture when it fits a unit name exactly, otherwise the
+; big title of the unit panel on the left (click the picture, read, close).
+; Cards are then known per unit: how many there are, and which is which.
+
+; distance between two card rows
+OvRowH(cards) {
+    best := 0
+    for i, c in cards
+        if (i > 1) {
+            d := c.y - cards[i - 1].y
+            if (d > 120 * WIN.u && (!best || d < best))
+                best := d
+        }
+    return best
+}
+; px the list moved between two looks (+ = content went up)
+ListShift(a, b, dir) {
+    R := MT.HasOwnProp("rowH") ? MT.rowH : 189 * WIN.u
+    sg := (dir = "WheelDown") ? 1 : -1
+    votes := Map()
+    for ca in a
+        for cb in b
+            if (Abs(ca.x - cb.x) < 20) {
+                v := sg * (ca.y - cb.y)
+                v := Mod(Mod(v, R) + R, R)         ; the same card moved by v (mod one row)
+                k := Round(v / 3)
+                votes[k] := votes.Get(k, 0) + 1
+            }
+    bestK := "", bestN := 0
+    for k, n in votes
+        if (n > bestN)
+            bestK := k, bestN := n
+    if (bestK = "")
+        return ""
+    v := bestK * 3
+    if (v > R - 4)                                 ; ~0 or ~one whole row: can't tell
+        v := 0
+    return sg * v
+}
+CardIdx(c) => Round((c.y + MT.ovOff - PY(244)) / MT.rowH) * 2 + (c.x > PX(1633, "r") ? 2 : 1)
+; the list position must be known: else go to the top (= position 0)
+OvSync(&r) {
+    if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("ovOff"))
+        return true
+    if !OverviewScroll("WheelUp")
+        return false
+    Wait(250)
+    r := OverviewRead()
+    if !(r.open && r.cards.Length && Abs(r.cards[1].y - PY(244)) < 12 * WIN.u)
+        return false
+    MT.ovOff := 0, MT.ovOk := true
+    return true
+}
+SlotName(sl) => (MT.HasOwnProp("fusedSlot") && MT.fusedSlot = sl) ? MT.fusedName : Trim(CFG.Get("Name" sl, ""))
+CensusGen() => MT.units.Length "|" (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0)
+; the unit of a card text, also the fused unit
+CardSlotF(text) {
+    if (MT.HasOwnProp("fusedSlot") && NameScore(text, MT.fusedName) >= 0.8)
+        return MT.fusedSlot
+    return CardSlot(text)
+}
+; give the visible cards their numbers, read names not known yet
+NameCards(r) {
+    gen := CensusGen()
+    if (!MT.HasOwnProp("cn") || MT.cnGen != gen)
+        MT.cn := Map(), MT.cnGen := gen, MT.cenGen := ""
+    h := OvRowH(r.cards)
+    if h
+        MT.rowH := h
+    else if !MT.HasOwnProp("rowH")
+        MT.rowH := 189 * WIN.u
+    small := ""
+    for i, c in r.cards {
+        c.idx := CardIdx(c)
+        if MT.cn.Has(c.idx)
+            continue
+        if !IsObject(small)
+            small := CardNames(r.cards)
+        nm := small[i], sl := CardSlotF(nm), how := "card"
+        if !(sl && NameScore(nm, SlotName(sl)) >= 1) {   ; not sure: the big panel
+            t := PanelTitle(c)
+            if (t != "")
+                nm := t, sl := CardSlotF(t), how := "panel"
+        }
+        MT.cn[c.idx] := {name: nm, slot: sl, how: how}
+    }
+}
+; the big title of a card's unit panel (left)
+PanelTitle(c) {
+    CloseUnitPanel()
+    ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
+    t := ""
+    Loop 2 {
+        Wait(A_Index = 1 ? 500 : 400)
+        r := OcrRef(20, 325, 295, 400, 2, "l", "c")          ; title only
+        t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
+        if (t != "")
+            break
+    }
+    CloseUnitPanel()
+    return t
+}
+; name every card (top of the list, then its bottom part). true = all known
+Census() {
+    gen := CensusGen()
+    if (MT.HasOwnProp("cenGen") && MT.cenGen = gen)
+        return MT.cenOk
+    r := OverviewOpen()
+    if !(r.open && r.cards.Length) || !OvSync(&r)
+        return false
+    NameCards(r)
+    if (r.cards.Length >= 8 || MT.units.Length > r.cards.Length) {   ; more below?
+        if (OverviewScroll("WheelDown") && MT.ovOk) {   ; scroll measured: numbers still right
+            Wait(300)
+            r2 := OverviewRead()
+            if (r2.open && r2.cards.Length)
+                NameCards(r2)
+        }
+    }
+    N := 0
+    for idx in MT.cn
+        N := Max(N, idx)
+    ok := (N >= 1)
+    Loop N
+        if !MT.cn.Has(A_Index)
+            ok := false                            ; a gap: some cards were never seen
+    line := ""
+    for idx, e in MT.cn
+        line .= (line = "" ? "" : ", ") idx "=" (e.slot ? "u" e.slot : "?") " " e.name
+    Out("  cards (" N "): " line (ok ? "" : "  [not all seen]"))
+    MT.cenGen := gen, MT.cenOk := ok, MT.cenN := N
+    return ok
+}
+; card of unit u by number: copy k of its unit = its k-th card in the list
+CardByIdx(u) {
+    if !Census()
+        return "?"
+    k := 0, total := 0
+    for v in MT.units
+        if (v.slot = u.slot) {
+            total++
+            if (v = u)
+                k := total
+        }
+    list := []
+    for idx, e in MT.cn
+        if (e.slot = u.slot)
+            list.Push(idx)
+    if (k > list.Length) {
+        if !u.HasOwnProp("nameMiss") {
+            u.nameMiss := true
+            Out("  unit " u.slot " (" SlotName(u.slot) "): " list.Length " card(s) for " total " placed - #" k " is not on the map")
+        }
+        return ""
+    }
+    want := list[k]
+    Loop 2 {
+        if (A_Index = 2 && !MT.ovOk)               ; the scroll was not measured: old way
+            return "?"
+        r := OverviewOpen()
+        if !r.open
+            return ""
+        if !OvSync(&r)                             ; list position lost: old way
+            return "?"
+        lo := 999, hi := 0
+        for c in r.cards {
+            c.idx := CardIdx(c), lo := Min(lo, c.idx), hi := Max(hi, c.idx)
+            if (c.idx = want)
+                return c
+        }
+        if (A_Index = 2 || !r.cards.Length)
+            break
+        if !OverviewScroll(want < lo ? "WheelUp" : "WheelDown")
+            break
+        Wait(250)
+    }
+    return ""
+}
+; Plan vs. cards: each placed named unit needs a card. Fewer cards than
+; placed units (and no unknown cards) = some were never really placed:
+; forget them and place them again.
+CheckPlaced() {
+    if (MT.HasOwnProp("chkGen") && MT.chkGen = CensusGen())
+        return
+    MT.chkGen := CensusGen()
+    if !Census()
+        return
+    have := Map(), unk := 0
+    for idx, e in MT.cn {
+        if e.slot
+            have[e.slot] := have.Get(e.slot, 0) + 1
+        else
+            unk++
+    }
+    if (unk || MT.cenN >= MT.units.Length)
+        return                                     ; every unit has a card (or can't tell)
+    again := []
+    Loop 6 {
+        sl := A_Index
+        if (SlotName(sl) = "")
+            continue
+        mine := []
+        for v in MT.units
+            if (v.slot = sl)
+                mine.Push(v)
+        miss := mine.Length - have.Get(sl, 0)
+        if (miss <= 0)
+            continue
+        Out("  unit " sl " (" SlotName(sl) "): " have.Get(sl, 0) " card(s) but " mine.Length " placed - "
+            . (MT.HasOwnProp("noReplace") && MT.noReplace.Has(sl) ? "fused, not placing it again" : "placing " miss " again"))
+        Loop miss {                                ; forget the newest ones
+            v := mine.Pop()
+            for i, w in MT.units
+                if (w = v) {
+                    MT.units.RemoveAt(i)
+                    break
+                }
+            if !(MT.HasOwnProp("noReplace") && MT.noReplace.Has(sl))
+                again.Push(v)
+        }
+    }
+    for v in again {
+        if MatchOver()
+            return
+        if !WaitYen(CFG["Cost" v.slot], 30000)
+            continue
+        PlaceAny(v.slot, v.HasOwnProp("style") ? v.style : "random", v.HasOwnProp("pt") ? v.pt : "")
+    }
+}
+; skill used on a unit that fuses (Vego + Carrot -> Fused Hero)?
+FuseCheck(u) {
+    nm := Trim(CFG.Get("Name" u.slot, ""))
+    if (nm = "")
+        return
+    for f in FUSIONS {
+        other := ""
+        if (NameScore(nm, f[1]) >= 0.8)
+            other := f[2]
+        else if (NameScore(nm, f[2]) >= 0.8)
+            other := f[1]
+        if (other = "")
+            continue
+        ps := 0
+        Loop 6
+            if (A_Index != u.slot && NameScore(Trim(CFG.Get("Name" A_Index, "")), other) >= 0.8)
+                ps := A_Index
+        n := 0
+        for v in MT.units
+            n += (v.slot = ps)
+        if (!ps || !n)
+            return                                 ; partner not on the map: no fusion
+        if !MT.HasOwnProp("noReplace")
+            MT.noReplace := Map()
+        MT.noReplace[ps] := true                   ; the partner is used up: never place it again
+        Wait(2500)
+        MT.fuseGen := (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0) + 1
+        found := false
+        if Census()
+            for idx, e in MT.cn
+                if (NameScore(e.name, f[3]) >= 0.8)
+                    found := true
+        if !found
+            return Out("  no " f[3] " card after the skill - not fused")
+        MT.fusedSlot := u.slot, MT.fusedName := f[3]
+        pi := 0
+        for i, w in MT.units                       ; the partner's unit is gone
+            if (w.slot = ps)
+                pi := i
+        if pi
+            MT.units.RemoveAt(pi)
+        MT.fuseGen++                                ; read the cards again
+        Out("  " f[1] " + " f[2] " fused -> " f[3] " (unit " u.slot "); upgrades of unit " u.slot " now go to " f[3])
+        return
+    }
 }
 
 ; one level for unit u: "ok" "max" "poor" "lost"
@@ -2947,6 +3240,7 @@ UpgradeOnce(u) {
 
 ; goal: "max", a level number, or "plus" (+plus levels from now)
 UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
+    CheckPlaced()                                  ; plan vs. cards: place missing ones again
     us := []
     for s in slots
         for u in MT.units
@@ -3081,6 +3375,7 @@ UseAbility(u, times) {
     }
     Wait(300)
     CloseUnitPanel()
+    FuseCheck(u)
 }
 
 SetAuto(u) {
