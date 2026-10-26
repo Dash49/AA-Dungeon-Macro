@@ -1193,6 +1193,8 @@ RecordSeen(name, effect, price) {
 
 MatchItem(text) {
     t := StrLower(RegExReplace(text, "[^A-Za-z]"))
+    ; the shop's pixel font: "Bow" is read "Boo"/"Bou", "Sword" "sUo rd"
+    t := RegExReplace(RegExReplace(t, "bo[ou](?!t)", "bow"), "suord", "sword")
     if (StrLen(t) < 4)
         return ""
     best := "", bl := 0
