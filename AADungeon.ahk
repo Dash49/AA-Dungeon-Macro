@@ -2413,38 +2413,58 @@ OverviewOpen() {
 }
 
 ; the red Return button under the Unit Overview list
+; (5 spots, 4 must be red: the "Activate Windows" text can lie over its top)
 OverviewReturnVisible() {
-    for pt in [[1471, 973], [1576, 968], [1685, 973]] {
+    n := 0
+    for pt in [[1471, 973], [1576, 968], [1685, 973], [1490, 1005], [1690, 1005]] {
         c := RGB(Color(PX(pt[1], "r"), PY(pt[2])))
-        if !(c.r > 200 && c.g < 50 && c.b < 50)
-            return false
+        n += (c.r > 175 && c.g < 50 && c.b < 50)
     }
-    return true
+    return n >= 4
 }
 
-; the unit panel on the left (opened by clicking a unit): red X + cyan First
-UnitPanelVisible() {
-    for pt in [[544, 346], [580, 346]] {
-        c := RGB(Color(PX(pt[1], "l"), PY(pt[2])))
-        if !(c.r > 190 && c.g < 50 && c.b < 50)
-            return false
+; the unit panel on the left (opened by clicking a unit): red X + cyan First.
+; It sits a bit lower on some screens (stats row above it): look for the
+; red X circle in an area, not at one spot. &x/&y = the X (screen).
+UnitPanelVisible(&x := 0, &y := 0) {
+    n := 0, sx := 0, sy := 0
+    yy := 300
+    while (yy <= 410) {
+        xx := 490
+        while (xx <= 620) {
+            c := RGB(Color(PX(xx, "l"), PY(yy)))
+            if (c.r > 190 && c.g < 50 && c.b < 50)
+                n++, sx += xx, sy += yy
+            xx += 4
+        }
+        yy += 4
     }
-    for pt in [[61, 658], [123, 658]] {
-        c := RGB(Color(PX(pt[1], "l"), PY(pt[2])))
-        if !(c.b > 190 && c.g > 150 && c.r < 90)
-            return false
+    if (n < 25)
+        return false
+    cy := 0
+    yy := 630
+    while (yy <= 690) {                            ; the cyan First button under it
+        xx := 30
+        while (xx <= 160) {
+            cy += IsCyan(Color(PX(xx, "l"), PY(yy)))
+            xx += 6
+        }
+        yy += 6
     }
+    if (cy < 10)
+        return false
+    x := PX(sx / n, "l"), y := PY(sy / n)
     return true
 }
 CloseUnitPanel() {
     Snap()
-    if !UnitPanelVisible()
+    if !UnitPanelVisible(&x, &y)
         return false
     Loop 2 {
-        ClickRef(562, 346, "l", "c")               ; its red X
+        ClickAt(x, y)                              ; its red X
         Wait(350)
         Snap()
-        if !UnitPanelVisible()
+        if !UnitPanelVisible(&x, &y)
             return true
     }
     return false
