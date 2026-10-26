@@ -2155,9 +2155,25 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             }
         }
     }
-    if (path.Length < 20 && FixFirstPerson())      ; first person hides the path
+    ; Some maps (Haunted Academy) show no red path at all. A hill unit does not
+    ; need it: green zones prove the unit is in hand; those then replace the path.
+    noPath := false
+    if (path.Length < 20 && IsHill(slot)) {
+        nz := 0
+        for k, gp in GreenGrid()
+            if !beforeG.Has(k)
+                nz++
+        if (nz >= 8) {
+            noPath := true
+            if !MT.HasOwnProp("noPathHill") {
+                MT.noPathHill := true
+                Out("  unit " slot ": no red path on this map, but hills are green - placing by the green zones")
+            }
+        }
+    }
+    if (path.Length < 20 && !noPath && FixFirstPerson())   ; first person hides the path
         return "fail"
-    if (path.Length < 20) {                        ; nothing in hand (a real path is long)
+    if (path.Length < 20 && !noPath) {             ; nothing in hand (a real path is long)
         if !MT.HasOwnProp("noPathLogged") {
             MT.noPathLogged := true
             c := Color(PX(960), PY(540))
@@ -2209,9 +2225,14 @@ PlaceUnit(slot, style := "random", pt0 := "") {
         Out("  every spot failed once - trying them again")
     }
     ; a few path points to watch: red gone = unit placed
+    ; (no red path: the green zone going away is the sign instead)
     watch := []
-    Loop Min(30, path.Length)
-        watch.Push(path[Random(1, path.Length)])
+    if noPath
+        Loop Min(30, zone.Length)
+            watch.Push(zone[Random(1, zone.Length)])
+    else
+        Loop Min(30, path.Length)
+            watch.Push(path[Random(1, path.Length)])
     fails := 0
     for c in cands {
         ClickRef(c.x, c.y)
@@ -2219,7 +2240,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
         Snap()
         red := 0
         for pt in watch
-            red += IsRed(Color(PX(pt[1]), PY(pt[2])))
+            red += noPath ? IsGreen(Color(PX(pt[1]), PY(pt[2]))) : IsRed(Color(PX(pt[1]), PY(pt[2])))
         if (red * 4 < watch.Length) {              ; the path is not red any more
             if !MT.HasOwnProp("fake")
                 MT.fake := Map()
