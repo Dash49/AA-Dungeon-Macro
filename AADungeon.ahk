@@ -1613,7 +1613,7 @@ PlayMatch() {
     Out("Match started - running the plan")
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
     for st in MT.planSteps                          ; the steps are shared between matches
-        st.done := false, st.want := "", st.tries := 0
+        st.done := false, st.want := "", st.tries := 0, st.noCount := false
     ; the vote panel can still be there for a moment - never place during it
     Loop 20 {
         if !InStr(AllText(), "Starts in")
@@ -3141,15 +3141,13 @@ NameCards(r) {
         c.idx := CardIdx(c)
         if MT.cn.Has(c.idx)
             continue
-        if !IsObject(small)
-            small := CardNames(r.cards)
-        nm := small[i], sl := CardSlotF(nm), how := "card"
-        if !(sl && NameScore(nm, SlotName(sl)) >= 1) {   ; not sure: the big panel
-            t := PanelTitle(c)
-            if (t != "")
-                nm := t, sl := CardSlotF(t), how := "panel"
+        t := PanelTitle(c), how := "panel"         ; click every card: its big name
+        if (t = "") {                              ; panel not readable: the small name
+            if !IsObject(small)
+                small := CardNames(r.cards)
+            t := small[i], how := "card"
         }
-        MT.cn[c.idx] := {name: nm, slot: sl, how: how}
+        MT.cn[c.idx] := {name: t, slot: CardSlotF(t), how: how}
     }
 }
 ; the big title of a card's unit panel (left)
@@ -3159,7 +3157,7 @@ PanelTitle(c) {
     t := ""
     Loop 2 {
         Wait(A_Index = 1 ? 500 : 400)
-        r := OcrRef(20, 325, 295, 400, 2, "l", "c")          ; title only
+        r := OcrRef(20, 315, 300, 415, 2, "l", "c")          ; title only
         t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
         if (t != "")
             break
@@ -3173,6 +3171,7 @@ Census() {
     if (MT.HasOwnProp("cenGen") && MT.cenGen = gen)
         return MT.cenOk
     r := OverviewOpen()
+    MT.ovOk := false                               ; always count from the top of the list
     if !(r.open && r.cards.Length) || !OvSync(&r)
         return false
     NameCards(r)
@@ -3232,15 +3231,15 @@ BottomCards(r2) {
         topS.Push(MT.cn.Has(A_Index) ? MT.cn[A_Index].slot : -1)
     while (topS.Length && topS[topS.Length] = -1)
         topS.Pop()
-    small := CardNames(r2.cards), bot := []
+    small := "", bot := []
     for i, c in r2.cards {
-        nm := small[i], sl := CardSlotF(nm), how := "card"
-        if !(sl && NameScore(nm, SlotName(sl)) >= 1) {   ; not sure: the big panel
-            title := PanelTitle(c)
-            if (title != "")
-                nm := title, sl := CardSlotF(title), how := "panel"
+        title := PanelTitle(c), how := "panel"     ; click every card: its big name
+        if (title = "") {
+            if !IsObject(small)
+                small := CardNames(r2.cards)
+            title := small[i], how := "card"
         }
-        bot.Push({name: nm, slot: sl, how: how})
+        bot.Push({name: title, slot: CardSlotF(title), how: how})
     }
     sEst := -1                                     ; what the pixel scroll said (tie-break only)
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("rowH") && MT.rowH)
@@ -3435,7 +3434,13 @@ CatchPlace(i, st) {
         if (v.slot = st.slot)
             mine.Push(v)
     have := mine.Length, how := "counted by the macro"
-    if (SlotName(st.slot) != "" && Census()) {     ; real cards, one by one
+    if (SlotName(st.slot) != "") {                 ; named: only the real cards count
+        if !Census() {
+            if !st.HasOwnProp("noCount") || !st.noCount
+                Out("  saving phase: step " i " (" st.text ") - cards could not be counted yet, trying later")
+            st.noCount := true
+            return false
+        }
         have := 0, how := "cards in Unit Overview"
         for idx, e in MT.cn
             have += (e.slot = st.slot)
