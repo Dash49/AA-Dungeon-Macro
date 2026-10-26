@@ -2703,8 +2703,11 @@ OverviewScroll(dir) {
         if !b.Length
             return false
         if (Abs(b[b.Length].y - before) < 3) {     ; did not move = end of the list
-            if (dir = "WheelUp")                   ; that notch zoomed the camera in - undo it
+            if (dir = "WheelUp") {                 ; that notch zoomed the camera in - undo it
                 ZoomOutKeys(2)
+                MT.ovOff := 0, MT.ovOk := true     ; at the top
+            } else if (MT.HasOwnProp("bottomS") && MT.HasOwnProp("rowH"))
+                BottomOff(b)                       ; at the bottom: known from the census
             return true
         }
         d := ListShift(prev, b, dir)               ; how far the list moved (card numbers)
@@ -3100,6 +3103,8 @@ NameCards(r) {
     gen := CensusGen()
     if (!MT.HasOwnProp("cn") || MT.cnGen != gen)
         MT.cn := Map(), MT.cnGen := gen, MT.cenGen := ""
+    if (MT.HasOwnProp("bottomS") && MT.cnGen != MT.bottomGen)
+        MT.DeleteProp("bottomS")                   ; the list changed: bottom part unknown
     h := OvRowH(r.cards)
     if h
         MT.rowH := h
@@ -3146,18 +3151,15 @@ Census() {
         return false
     NameCards(r)
     full := (r.cards.Length < 7)                   ; the whole list fits on the screen
-    if (MT.units.Length > r.cards.Length) {        ; more cards below
-        off0 := MT.ovOff
+    aligned := false
+    if !full {                                     ; only 8 show: scroll to the end, read the rest
         if !OverviewScroll("WheelDown")
             Out("  card list: did not scroll down")
-        else if !MT.ovOk
-            Out("  card list: scroll not measured")
         else {
             Wait(300)
             r2 := OverviewRead()
             if (r2.open && r2.cards.Length)
-                NameCards(r2)
-            Out("  card list: scrolled " Round(MT.ovOff - off0) " px (row " Round(MT.rowH) " px)")
+                aligned := BottomCards(r2)
         }
     }
     N := 0
@@ -3169,7 +3171,7 @@ Census() {
             ok := false                            ; a gap: some cards were never seen
     ; fewer cards than placed units is only believed when the whole list was
     ; on one screen (a mis-measured scroll once "lost" units 1 and 2)
-    if (!full && N < MT.units.Length)
+    if (!full && !aligned && N < MT.units.Length)
         ok := false
     line := ""
     for idx, e in MT.cn
@@ -3177,6 +3179,62 @@ Census() {
     Out("  cards (" N "): " line (ok ? "" : "  [not all seen]"))
     MT.cenGen := gen, MT.cenOk := ok, MT.cenN := N
     return ok
+}
+; The list scrolled to its end: which card is the first one shown? The
+; pixel scroll can't be trusted (a wheel notch may move more than a row),
+; so the units of the bottom cards are lined up with the top cards:
+; bottom card i = card i + s, the s where both agree. true = done.
+BottomCards(r2) {
+    T := []
+    Loop 8
+        T.Push(MT.cn.Has(A_Index) ? MT.cn[A_Index].slot : -1)
+    while (T.Length && T[T.Length] = -1)
+        T.Pop()
+    small := CardNames(r2.cards), B := []
+    for i, c in r2.cards {
+        nm := small[i], sl := CardSlotF(nm), how := "card"
+        if !(sl && NameScore(nm, SlotName(sl)) >= 1) {   ; not sure: the big panel
+            t := PanelTitle(c)
+            if (t != "")
+                nm := t, sl := CardSlotF(t), how := "panel"
+        }
+        B.Push({name: nm, slot: sl, how: how})
+    }
+    sEst := -1                                     ; what the pixel scroll said (tie-break only)
+    if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("rowH") && MT.rowH)
+        sEst := Round((MT.ovOff + (r2.cards[1].y - PY(244))) / MT.rowH) * 2
+    bestS := -1, bestBad := 99, bestOv := 0
+    sh := 0
+    while (sh <= 16) {
+        ov := 0, bad := 0
+        for i, b in B
+            if (i + sh <= T.Length)
+                ov++, bad += (b.slot != T[i + sh])
+        if (ov >= 2 && sh + B.Length >= T.Length && bad <= (ov >= 4 ? 1 : 0)) {
+            better := (bad < bestBad) || (bad = bestBad && sEst >= 0 && Abs(sh - sEst) < Abs(bestS - sEst))
+            if (bestS < 0 || better)
+                bestS := sh, bestBad := bad, bestOv := ov
+        }
+        sh++
+    }
+    if (bestS < 0) {
+        Out("  card list: the bottom cards don't line up with the top ones - not counting")
+        return false
+    }
+    for i, b in B
+        if !MT.cn.Has(i + bestS)
+            MT.cn[i + bestS] := b
+    MT.bottomS := bestS, MT.bottomGen := MT.cnGen
+    BottomOff(r2.cards)
+    Out("  card list: bottom part = cards " (bestS + 1) "-" (bestS + B.Length) " (" bestOv " overlap" (bestBad ? ", 1 unsure" : "") ")")
+    return true
+}
+; list at its bottom: set the offset so CardIdx gives the census numbers
+BottomOff(cards) {
+    c := cards[1]
+    col := (c.x > PX(1633, "r")) ? 2 : 1
+    row := (MT.bottomS + 1 - col) // 2
+    MT.ovOff := row * MT.rowH - (c.y - PY(244)), MT.ovOk := true
 }
 ; card of unit u by number: copy k of its unit = its k-th card in the list
 CardByIdx(u) {
