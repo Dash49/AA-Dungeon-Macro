@@ -53,6 +53,10 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Upgrades of named units go through the unit panel (`UpgradeByPanel`): click the card picture, read the
   big name (must match), `Upgrade [n]`, `(MAX)`, the price on the big button (`PanelInfo`), click it only when
   the yen is enough, check the level went up. Unnamed units use the card button (`UpgradeByCard`).
+- Saving phase: while an upgrade waits for yen, `CatchUp()` (every 3 s) looks back at plan steps 1..current-1:
+  a step fully done is marked `st.done` (reset each match); otherwise one action (place a missing unit / one
+  level of a pending upgrade target, goals in `st.want`). Census bottom part: `BottomCards()` lines the
+  bottom cards up with the top ones by unit (not by pixels); `CheckPlaced()` counts twice before re-placing.
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
   `OverviewScroll` scrolls one notch at a time – an extra wheel notch at the list end zooms the
   camera into first person (a classic bug). `FixFirstPerson()` repairs that.
