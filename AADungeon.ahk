@@ -1769,8 +1769,9 @@ IsHill(slot) => (StrLower(CFG.Get("Type" slot, "ground")) = "hill")
 
 IsGreen(col) {
     r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
-    ; hill zones: (20,190,60)-ish, on some maps almost no blue (9,186,25)
-    return (r < 70 && g > 160 && b < 125 && g - b > 90 && g - r > 110)
+    ; hill zones: (20,190,60)-ish, on some maps almost no blue (9,186,25),
+    ; on Navy Bay mint (18,255,178); water there is (0,160,255) = more blue
+    return (r < 70 && g > 160 && g - r > 110 && g - b > 60 && b < 200)
 }
 GreenGrid(step := 12) {
     m := Map()
