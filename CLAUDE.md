@@ -78,6 +78,8 @@ A loop of the same line usually shows where it is stuck.
 
 ## AHK v2 pitfalls (all of these broke the macro before)
 - Two functions with the same name (any case) = the script will not load (`Lev` broke it once).
+- Names are case-insensitive: `T` and `t` (or `B`/`b`) are ONE variable – `t := PanelTitle()` once wiped the
+  array `T` (BottomCards crash). Use distinct names. Script errors are logged as `ERROR: ... | line n` (`ErrLog`).
 - Names are case-insensitive: a local variable must not share a function's name
   (e.g. a variable `lines` hides the function `Lines()` – that crashed the shop).
 - Assigning a global inside a function needs `global X`; property/item writes (`MT.x := 1`) do not.

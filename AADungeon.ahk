@@ -76,6 +76,7 @@ FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =
 Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode: " CFG["Preset"])
 Status("AA Dungeon ready - F2 start")
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
+OnError(ErrLog)                                     ; script errors go to the log too
 if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
     Out("Restarted after being stuck - starting again in 5 s")
     SetTimer(Start, -5000)
@@ -128,6 +129,20 @@ Out(msg) {
     STATE.hb := A_TickCount                        ; still alive (Watchdog)
     line := "[" FormatTime(, "HH:mm:ss") "] " msg
     try FileAppend(line "`n", LOGFILE, "UTF-8")
+}
+
+; A script error: write it (message, line, call stack) to the log - the
+; popup is easy to miss - and, while running, restart and go on.
+ErrLog(e, mode) {
+    try Out("ERROR: " e.Message " | line " e.Line " | " e.What (e.Extra != "" ? " | " e.Extra : ""))
+    try FileAppend(e.Stack "`n", LOGFILE, "UTF-8")
+    try Shot("error")
+    if STATE.run {
+        try Out("restarting after the error")
+        Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
+        ExitApp()
+    }
+    return 0                                       ; not running: the normal popup
 }
 
 ; The main loop stopped moving for 5 min (stuck in OCR or a frozen
@@ -3196,20 +3211,20 @@ Census() {
 ; so the units of the bottom cards are lined up with the top cards:
 ; bottom card i = card i + s, the s where both agree. true = done.
 BottomCards(r2) {
-    T := []
+    topS := []
     Loop 8
-        T.Push(MT.cn.Has(A_Index) ? MT.cn[A_Index].slot : -1)
-    while (T.Length && T[T.Length] = -1)
-        T.Pop()
-    small := CardNames(r2.cards), B := []
+        topS.Push(MT.cn.Has(A_Index) ? MT.cn[A_Index].slot : -1)
+    while (topS.Length && topS[topS.Length] = -1)
+        topS.Pop()
+    small := CardNames(r2.cards), bot := []
     for i, c in r2.cards {
         nm := small[i], sl := CardSlotF(nm), how := "card"
         if !(sl && NameScore(nm, SlotName(sl)) >= 1) {   ; not sure: the big panel
-            t := PanelTitle(c)
-            if (t != "")
-                nm := t, sl := CardSlotF(t), how := "panel"
+            title := PanelTitle(c)
+            if (title != "")
+                nm := title, sl := CardSlotF(title), how := "panel"
         }
-        B.Push({name: nm, slot: sl, how: how})
+        bot.Push({name: nm, slot: sl, how: how})
     }
     sEst := -1                                     ; what the pixel scroll said (tie-break only)
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("rowH") && MT.rowH)
@@ -3218,10 +3233,10 @@ BottomCards(r2) {
     sh := 0
     while (sh <= 16) {
         ov := 0, bad := 0
-        for i, b in B
-            if (i + sh <= T.Length)
-                ov++, bad += (b.slot != T[i + sh])
-        if (ov >= 2 && sh + B.Length >= T.Length && bad <= (ov >= 4 ? 1 : 0)) {
+        for i, bc in bot
+            if (i + sh <= topS.Length)
+                ov++, bad += (bc.slot != topS[i + sh])
+        if (ov >= 2 && sh + bot.Length >= topS.Length && bad <= (ov >= 4 ? 1 : 0)) {
             better := (bad < bestBad) || (bad = bestBad && sEst >= 0 && Abs(sh - sEst) < Abs(bestS - sEst))
             if (bestS < 0 || better)
                 bestS := sh, bestBad := bad, bestOv := ov
@@ -3232,16 +3247,16 @@ BottomCards(r2) {
         Out("  card list: the bottom cards don't line up with the top ones - not counting")
         return false
     }
-    if (bestS = 0 && MT.units.Length > T.Length) {
+    if (bestS = 0 && MT.units.Length > topS.Length) {
         Out("  card list: still the top cards after scrolling (" MT.units.Length " units) - not counting")
         return false
     }
-    for i, b in B
+    for i, bc in bot
         if !MT.cn.Has(i + bestS)
-            MT.cn[i + bestS] := b
+            MT.cn[i + bestS] := bc
     MT.bottomS := bestS, MT.bottomGen := MT.cnGen
     BottomOff(r2.cards)
-    Out("  card list: bottom part = cards " (bestS + 1) "-" (bestS + B.Length) " (" bestOv " overlap" (bestBad ? ", 1 unsure" : "") ")")
+    Out("  card list: bottom part = cards " (bestS + 1) "-" (bestS + bot.Length) " (" bestOv " overlap" (bestBad ? ", 1 unsure" : "") ")")
     return true
 }
 ; list at its bottom: set the offset so CardIdx gives the census numbers
