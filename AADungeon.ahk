@@ -29,7 +29,7 @@ global PLANFILE := A_ScriptDir "\plan.txt"
 ; window + scale. All coordinates below are 1920x1080 full-screen pixels;
 ; they are converted with the real client size (UI scale = height / 1080).
 global WIN := {id: 0, x: 0, y: 0, w: 1920, h: 1080, u: 1.0}
-global STATE := {run: false, pause: false, stop: false}
+global STATE := {run: false, pause: false, stop: false, hb: 0}
 ; one dungeon run / one match
 global SNP := {x: 0, y: 0, w: 0, h: 0, buf: ""}
 global RS := {depth: 0, maxDepth: 20, bossDone: false, chestsDone: false, lastRoute: 0, camDone: false, died: false, ready: true, endAt: 0, camVote: false, coins: -1, poke: 0, startAt: 0, hillScan: "", toLobby: false, stage: "", stageMove: "", stageWalked: false, voteAt: 0}
@@ -73,6 +73,10 @@ FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =
 Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode: " CFG["Preset"])
 Status("AA Dungeon ready - F2 start")
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
+if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
+    Out("Restarted after being stuck - starting again in 5 s")
+    SetTimer(Start, -5000)
+}
 return
 
 ; ===================================================== configuration
@@ -110,8 +114,21 @@ LoadConfig() {
 
 ; ============================================================ basics
 Out(msg) {
+    STATE.hb := A_TickCount                        ; still alive (Watchdog)
     line := "[" FormatTime(, "HH:mm:ss") "] " msg
     try FileAppend(line "`n", LOGFILE, "UTF-8")
+}
+
+; The main loop stopped moving for 5 min (stuck in OCR or a frozen
+; call - once nothing was logged for an hour after the chests): restart
+; the macro, and it starts again by itself.
+Watchdog() {
+    if (!STATE.run || STATE.pause || A_TickCount - STATE.hb < 300000)
+        return
+    Out("No progress for 5 min - restarting the macro")
+    try Shot("stuck")
+    Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
+    ExitApp()
 }
 
 Status(msg) {
@@ -133,6 +150,7 @@ Hold() {
 }
 
 Wait(ms) {
+    STATE.hb := A_TickCount
     t := A_TickCount
     while (A_TickCount - t < ms) {
         Hold()
@@ -188,7 +206,7 @@ Key(k, ms := 50) {
 }
 
 Focus() {
-    if (WIN.id && !WinActive(WIN.id)) {
+    if (WIN.id && !WinActive(WIN.id) && !DllCall("IsHungAppWindow", "ptr", WIN.id)) {
         WinActivate(WIN.id)
         Sleep 150
     }
@@ -427,18 +445,29 @@ Start() {
     if !LoadPlan()
         return
     STATE.run := true
+    STATE.hb := A_TickCount
+    SetTimer(Watchdog, 30000)
     RS.ready := false, RS.endAt := A_TickCount, RS.startAt := RS.endAt ; never assume a new match at start
     Focus()
     Out("Started. client " WIN.w "x" WIN.h " scale " Round(WIN.u, 3) ", plan " MT.planSteps.Length " steps")
     Status("running")
-    last := "", since := A_TickCount, closes := 0
+    last := "", since := A_TickCount, closes := 0, hung := 0
     Loop {
         Hold()
+        STATE.hb := A_TickCount
         if !FindRoblox() {
             Out("Roblox closed - waiting")
             Wait(5000)
             continue
         }
+        if DllCall("IsHungAppWindow", "ptr", WIN.id) {   ; frozen: don't touch it
+            if !hung
+                hung := A_TickCount, Out("Roblox is not responding - waiting")
+            Wait(3000)
+            continue
+        }
+        if hung
+            Out("Roblox responds again (" Round((A_TickCount - hung) / 1000) " s)"), hung := 0
         s := Screen(&r)
         if (s != last) {
             Out("Screen: " s)
@@ -1513,6 +1542,7 @@ ReadHotbarCosts() {
 ; the match is over when any end / dungeon screen shows up
 MatchOver() {
     static last := 0
+    STATE.hb := A_TickCount
     if (A_TickCount - last < 1500)
         return false
     last := A_TickCount
