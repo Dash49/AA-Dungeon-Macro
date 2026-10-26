@@ -150,10 +150,35 @@ TogglePause() {
 }
 
 Hold() {
+    static chk := 0
     while STATE.pause
         Sleep 200
     if STATE.stop
         Exit
+    ; Windows locked: the game can't be seen or clicked - just wait
+    if (STATE.run && A_TickCount - chk > 1000) {
+        chk := A_TickCount
+        if IsLocked() {
+            Out("Windows is locked - waiting until it is unlocked (the macro can't see or click the game)")
+            while IsLocked() {
+                STATE.hb := A_TickCount
+                Sleep 1000
+            }
+            Out("Windows unlocked - going on")
+            chk := A_TickCount
+        }
+    }
+}
+; lock screen up = LogonUI runs and the input desktop can't be switched to
+IsLocked() {
+    if !ProcessExist("LogonUI.exe")
+        return false
+    h := DllCall("OpenInputDesktop", "uint", 0, "int", 0, "uint", 0x0100, "ptr")
+    if !h
+        return true
+    ok := DllCall("SwitchDesktop", "ptr", h)
+    DllCall("CloseDesktop", "ptr", h)
+    return !ok
 }
 
 Wait(ms) {
@@ -453,12 +478,15 @@ Start() {
         return
     STATE.run := true
     STATE.hb := A_TickCount
+    ; keep the screen on and the PC awake while the macro runs (a screen
+    ; that turns off can lock Windows, and then nothing can be clicked)
+    DllCall("SetThreadExecutionState", "uint", 0x80000003)
     SetTimer(Watchdog, 30000)
     RS.ready := false, RS.endAt := A_TickCount, RS.startAt := RS.endAt ; never assume a new match at start
     Focus()
     Out("Started. client " WIN.w "x" WIN.h " scale " Round(WIN.u, 3) ", plan " MT.planSteps.Length " steps")
     Status("running")
-    last := "", since := A_TickCount, closes := 0, hung := 0
+    last := "", since := A_TickCount, closes := 0, hung := 0, unkShot := false
     Loop {
         Hold()
         STATE.hb := A_TickCount
@@ -478,7 +506,7 @@ Start() {
         s := Screen(&r)
         if (s != last) {
             Out("Screen: " s)
-            last := s, since := A_TickCount
+            last := s, since := A_TickCount, unkShot := false
         }
         Status(s)
         if (s = "loading" || s = "vote" || s = "intro" || s = "lobby")
@@ -539,7 +567,8 @@ Start() {
             default:
                 if (A_TickCount - since > 15000) {
                     Out("Unknown screen 15s, text: " SubStr(RegExReplace(IsObject(r) ? r.t : "", "\s+", " "), 1, 160))
-                    Shot("unknown")
+                    if !unkShot                    ; one picture per stuck screen
+                        Shot("unknown"), unkShot := true
                     ClickAnywhere()
                     since := A_TickCount
                 }
@@ -1043,6 +1072,8 @@ LoadingMap(r) {
     for ln in Lines(r) {
         if prev {
             name := Trim(RegExReplace(ln.t, "\s+", " "))
+            if RegExMatch(name, "i)^(Dungeon|Depth|Easy|Normal|Hard|Insane|Nightmare|Travel)")
+                continue                           ; not the map name - the next line
             if (name != last && RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$")) {
                 last := name
                 Out("  map: " name)
@@ -1050,7 +1081,7 @@ LoadingMap(r) {
             }
             return
         }
-        prev := RegExMatch(ln.t, "i)Travel+ing\s*to")
+        prev := prev || RegExMatch(ln.t, "i)Travel+ing\s*to")
     }
 }
 ; every map name seen goes to maps_seen.txt (F8 > ด่าน lists them)
