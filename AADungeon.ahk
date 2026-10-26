@@ -2368,7 +2368,14 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     Loop Min(30, path.Length)
         watch.Push(path[Random(1, path.Length)])
     fails := 0
+    yb := yen0, ybAt := A_TickCount                ; yen just before the click (income comes fast late)
     for c in cands {
+        if (n0 < 0 && yen0 > 0 && A_TickCount - ybAt > 1500) {
+            v := ReadYenOnce()
+            if (v >= 0)
+                yb := v
+            ybAt := A_TickCount
+        }
         ClickRef(c.x, c.y)
         Wait(130)
         Snap()
@@ -2404,23 +2411,25 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     return "fail"
                 }
             }
-            if (n0 < 0 && yen0 > 0) {              ; no card check: the yen must drop
+            if (n0 < 0 && yb > 0) {                ; no card check: the yen must drop
                 drop := Min(CFG["Cost" slot] * 0.5, 250) ; the price in settings may be off
                 y1 := -1
                 Loop 5 {
                     Wait(150)
                     y1 := ReadYen()
-                    if (y1 >= 0 && y1 <= yen0 - drop)
+                    if (y1 >= 0 && y1 <= yb - drop)
                         break
                 }
-                if (y1 >= 0 && y1 > yen0 - drop) {
+                if (y1 > yb + 50)                  ; income came in meanwhile: can't tell - trust the path
+                    Out("  unit " slot ": yen went up (" yb " -> " y1 ") - trusting the red path")
+                else if (y1 >= 0 && y1 > yb - drop) {
                     capT := OcrRef(300, 520, 1620, 900, 1)
                     if (IsObject(capT) && RegExMatch(capT.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
                         Out("  unit " slot ": the game allows only " m[1])
                         MT.capped[slot] := true
                         return "cap"
                     }
-                    Out("  unit " slot ": not really placed at " Round(c.x) "," Round(c.y) " (yen " yen0 " -> " y1 ") - trying again")
+                    Out("  unit " slot ": not really placed at " Round(c.x) "," Round(c.y) " (yen " yb " -> " y1 ") - trying again")
                     MT.bad.Push(c)
                     return "fail"
                 }
@@ -3136,12 +3145,19 @@ Census() {
     if !(r.open && r.cards.Length) || !OvSync(&r)
         return false
     NameCards(r)
+    full := (r.cards.Length < 7)                   ; the whole list fits on the screen
     if (MT.units.Length > r.cards.Length) {        ; more cards below
-        if (OverviewScroll("WheelDown") && MT.ovOk) {   ; scroll measured: numbers still right
+        off0 := MT.ovOff
+        if !OverviewScroll("WheelDown")
+            Out("  card list: did not scroll down")
+        else if !MT.ovOk
+            Out("  card list: scroll not measured")
+        else {
             Wait(300)
             r2 := OverviewRead()
             if (r2.open && r2.cards.Length)
                 NameCards(r2)
+            Out("  card list: scrolled " Round(MT.ovOff - off0) " px (row " Round(MT.rowH) " px)")
         }
     }
     N := 0
@@ -3151,6 +3167,10 @@ Census() {
     Loop N
         if !MT.cn.Has(A_Index)
             ok := false                            ; a gap: some cards were never seen
+    ; fewer cards than placed units is only believed when the whole list was
+    ; on one screen (a mis-measured scroll once "lost" units 1 and 2)
+    if (!full && N < MT.units.Length)
+        ok := false
     line := ""
     for idx, e in MT.cn
         line .= (line = "" ? "" : ", ") idx "=" (e.slot ? "u" e.slot : "?") " " e.name
