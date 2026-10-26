@@ -852,6 +852,13 @@ LabelPts(t, coins, depth) {
     return CFG.Has(t) ? CFG[t] : 0
 }
 
+; chests a room gives (a Chest label = one chest)
+ChestCount(labels) {
+    n := 0
+    for t in labels
+        n += (t = "Chest")
+    return n
+}
 SetPts(labels, coins, depth) {
     s := 0
     for t in labels
@@ -1004,28 +1011,43 @@ DoRoute() {
         RS.coins := r.coins
     if (r.depth)
         RS.depth := r.depth, RS.maxDepth := r.max
+    ; Every route = this tile, then one of the rooms above it. A tile is
+    ; worth its own points + Lookahead x the best room after it (you pick
+    ; that one next time) + a little for a 2nd good choice there. Same
+    ; score: more chests on the best route wins.
     list := []
     txt := ""
     for t in r.tiles {
         now := SetPts(t.labels, r.coins, r.depth)
-        nxt := 0
-        if t.ahead.Length {
-            nxt := -99999
-            for a in t.ahead
-                nxt := Max(nxt, SetPts(a, r.coins, r.depth + 1))
-            nxt := Max(nxt, 0)                     ; empty next tiles are normal rooms
+        opts := []                                 ; the rooms after it, best first
+        for a in t.ahead {
+            o := {labels: a, pts: SetPts(a, r.coins, r.depth + 1), chests: ChestCount(a)}
+            i := opts.Length + 1
+            while (i > 1 && (opts[i - 1].pts < o.pts || (opts[i - 1].pts = o.pts && opts[i - 1].chests < o.chests)))
+                i--
+            opts.InsertAt(i, o)
         }
-        t.score := now + CFG["Lookahead"] * nxt
+        b1 := opts.Length ? Max(opts[1].pts, 0) : 0   ; empty next tiles are normal rooms (0)
+        b2 := (opts.Length >= 2) ? Max(opts[2].pts, 0) : 0
+        t.score := now + CFG["Lookahead"] * (b1 + 0.15 * b2)
+        t.chests := ChestCount(t.labels) + (opts.Length ? opts[1].chests : 0)
+        t.next := opts.Length ? opts[1].labels : []
         i := list.Length + 1
-        while (i > 1 && list[i - 1].score < t.score)
+        while (i > 1 && (list[i - 1].score < t.score || (list[i - 1].score = t.score && list[i - 1].chests < t.chests)))
             i--
         list.InsertAt(i, t)
         ah := ""
-        for a in t.ahead
-            ah .= (A_Index > 1 ? " | " : "") Join(a)
-        txt .= (txt != "" ? "  ||  " : "") (t.labels.Length ? Join(t.labels) : "Normal") (ah != "" ? " > [" ah "]" : "") " = " Round(t.score, 1)
+        for o in opts
+            ah .= (A_Index > 1 ? " | " : "") Join(o.labels) " " Round(o.pts)
+        txt .= (txt != "" ? "  ||  " : "") (t.labels.Length ? Join(t.labels) : "Normal") " " Round(now)
+            . (ah != "" ? " > [" ah "]" : "") " = " Round(t.score, 1)
     }
     Out("Depth " r.depth "/" r.max "  coins " r.coins "  " txt)
+    if list.Length {
+        b := list[1]
+        Out("  best route: " (b.labels.Length ? Join(b.labels) : "Normal")
+            . (b.next.Length ? " -> " Join(b.next) : "") "  (" b.chests " chest" (b.chests = 1 ? "" : "s") ")")
+    }
     for t in list {
         if EnterTile(t) {
             Out("Entered " (t.labels.Length ? Join(t.labels) : "Normal") " room")
