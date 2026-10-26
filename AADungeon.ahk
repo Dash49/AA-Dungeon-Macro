@@ -2160,7 +2160,10 @@ PlaceUnit(slot, style := "random", pt0 := "") {
         n0 := ov.open ? 1 : -1
     }
     MT.ovOpen := (n0 >= 0)
-    yen0 := wide ? ReadYen() : -1
+    ; no card check (whole map, or 8+ units = more than the panel shows):
+    ; the yen must drop instead. Without it, a click on a unit already
+    ; standing there also cleared the red path and counted as "placed".
+    yen0 := (n0 < 0) ? ReadYen() : -1
     MouseMove(PX(960), PY(120))                    ; off the ground first
     Snap()
     base := (n0 >= 0) ? Max(ScanCards().Length, MT.units.Length) : 0
@@ -2289,16 +2292,16 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     return "fail"
                 }
             }
-            if (wide && yen0 > 0) {                ; no cards on screen: the yen must drop
-                cost := CFG["Cost" slot]
+            if (n0 < 0 && yen0 > 0) {              ; no card check: the yen must drop
+                drop := Min(CFG["Cost" slot] * 0.5, 250) ; the price in settings may be off
                 y1 := -1
-                Loop 4 {
+                Loop 5 {
                     Wait(150)
                     y1 := ReadYen()
-                    if (y1 >= 0 && y1 <= yen0 - cost * 0.5)
+                    if (y1 >= 0 && y1 <= yen0 - drop)
                         break
                 }
-                if (y1 >= 0 && y1 > yen0 - cost * 0.5) {
+                if (y1 >= 0 && y1 > yen0 - drop) {
                     capT := OcrRef(300, 520, 1620, 900, 1)
                     if (IsObject(capT) && RegExMatch(capT.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
                         Out("  unit " slot ": the game allows only " m[1])
@@ -2826,7 +2829,10 @@ CardByName(u, nm) {
         if MT.HasOwnProp("ncNames")
             for t in MT.ncNames
                 seen .= (seen = "" ? "" : ", ") t
-        Out("  unit " u.slot " (" nm "): no card with that name in Unit Overview (read: " seen ") - check the name in F8")
+        if (IsSet(hits) && hits.Length)            ; the name is right, a copy is missing
+            Out("  unit " u.slot " (" nm "): only " hits.Length " card(s) with that name - #" u.n " is not on the map")
+        else
+            Out("  unit " u.slot " (" nm "): no card with that name in Unit Overview (read: " seen ") - check the name in F8")
     }
     return ""
 }
