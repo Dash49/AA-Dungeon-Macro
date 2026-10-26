@@ -2966,14 +2966,20 @@ CardIdx(c) => Round((c.y + MT.ovOff - PY(244)) / MT.rowH) * 2 + (c.x > PX(1633, 
 OvSync(&r) {
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("ovOff"))
         return true
-    if !OverviewScroll("WheelUp")
-        return false
-    Wait(250)
-    r := OverviewRead()
-    if !(r.open && r.cards.Length && Abs(r.cards[1].y - PY(244)) < 12 * WIN.u)
-        return false
-    MT.ovOff := 0, MT.ovOk := true
-    return true
+    if (MT.HasOwnProp("ovFail") && MT.ovFail >= 2)
+        return false                               ; failed twice this match: don't keep scrolling
+    if OverviewScroll("WheelUp") {
+        Wait(250)
+        r := OverviewRead()
+        if (r.open && r.cards.Length && Abs(r.cards[1].y - PY(244)) < 12 * WIN.u) {
+            MT.ovOff := 0, MT.ovOk := true
+            return true
+        }
+    }
+    MT.ovFail := (MT.HasOwnProp("ovFail") ? MT.ovFail : 0) + 1
+    if (MT.ovFail = 2)
+        Out("  card list: top of the list not found - using the old card search this match")
+    return false
 }
 SlotName(sl) => (MT.HasOwnProp("fusedSlot") && MT.fusedSlot = sl) ? MT.fusedName : Trim(CFG.Get("Name" sl, ""))
 CensusGen() => MT.units.Length "|" (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0)
@@ -3033,7 +3039,7 @@ Census() {
     if !(r.open && r.cards.Length) || !OvSync(&r)
         return false
     NameCards(r)
-    if (r.cards.Length >= 8 || MT.units.Length > r.cards.Length) {   ; more below?
+    if (MT.units.Length > r.cards.Length) {        ; more cards below
         if (OverviewScroll("WheelDown") && MT.ovOk) {   ; scroll measured: numbers still right
             Wait(300)
             r2 := OverviewRead()
@@ -3066,6 +3072,8 @@ CardByIdx(u) {
             if (v = u)
                 k := total
         }
+    if !k
+        return ""                                  ; not one of the placed units any more
     list := []
     for idx, e in MT.cn
         if (e.slot = u.slot)
