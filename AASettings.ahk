@@ -1334,15 +1334,27 @@ OnClose(*) {
 ; ============================================================ update
 ; Downloads the newest program files from GitHub and replaces only those.
 ; settings.ini, plan.txt, logs and reports are never touched.
+; the raw files of the newest commit (raw ".../main/" is cached for minutes
+; and once put an older macro over a newer one)
+LatestRaw() {
+    try {
+        tmp := A_Temp "\aad_sha.json"
+        Download("https://api.github.com/repos/Dash49/AA-Dungeon-Macro/commits/main", tmp)
+        if RegExMatch(FileRead(tmp, "UTF-8"), '"sha"\s*:\s*"([0-9a-f]{40})"', &m)
+            return "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/" m[1] "/"
+    }
+    return REPO_RAW
+}
 UpdateMacro() {
     C.status.Text := "กำลังเช็คเวอร์ชันใหม่..."
     dir := A_Temp "\aad_update"
     changed := []
     try {
         DirCreate(dir)
+        base := LatestRaw()
         for f in UPDATE_FILES {
             tmp := dir "\" StrReplace(f, "/", "_")
-            Download(REPO_RAW f "?t=" A_TickCount, tmp)
+            Download(base f, tmp)
             latest := FileRead(tmp, "UTF-8")
             if !InStr(SubStr(latest, 1, 60), "#Requires AutoHotkey v2")
                 throw Error("ไฟล์ที่โหลดมาไม่ถูกต้อง: " f)

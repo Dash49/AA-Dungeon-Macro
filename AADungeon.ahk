@@ -49,10 +49,21 @@ Hotkey "F8", (*) => OpenSettings()                         ; settings window
 Hotkey "F9", (*) => OpenSettings("/report")                ; send a bug report
 
 ; compare this file with the newest one on GitHub (once, at start)
+; the raw files of the newest commit (raw ".../main/" is cached for minutes
+; and once gave an older file than the one just published)
+LatestRaw() {
+    try {
+        tmp := A_Temp "\aad_sha.json"
+        Download("https://api.github.com/repos/Dash49/AA-Dungeon-Macro/commits/main", tmp)
+        if RegExMatch(FileRead(tmp, "UTF-8"), '"sha"\s*:\s*"([0-9a-f]{40})"', &m)
+            return "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/" m[1] "/"
+    }
+    return "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
+}
 CheckNewVersion() {
     try {
         tmp := A_Temp "\aad_check.ahk"
-        Download("https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/AADungeon.ahk?t=" A_TickCount, tmp)
+        Download(LatestRaw() "AADungeon.ahk", tmp)
         latest := StrReplace(FileRead(tmp, "UTF-8"), "`r`n", "`n")
         cur := StrReplace(FileRead(A_ScriptFullPath, "UTF-8"), "`r`n", "`n")
         if (InStr(SubStr(latest, 1, 60), "#Requires AutoHotkey v2") && latest != cur) {
@@ -1613,7 +1624,7 @@ PlayMatch() {
     Out("Match started - running the plan")
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
     for st in MT.planSteps                          ; the steps are shared between matches
-        st.done := false, st.want := "", st.tries := 0, st.noCount := false
+        st.done := false, st.want := "", st.tries := 0, st.said := ""
     ; the vote panel can still be there for a moment - never place during it
     Loop 20 {
         if !InStr(AllText(), "Starts in")
@@ -3388,6 +3399,13 @@ CheckPlaced() {
 ; 1..current-1. A step that is fully done is marked and never checked
 ; again; one that is not (a unit not placed, a level not reached) gets
 ; one action now if the yen allows. true = something was done.
+; a look-back line, only when it differs from the last one for that step
+CatchSay(st, msg) {
+    if (st.HasOwnProp("said") && st.said = msg)
+        return
+    st.said := msg
+    Out(msg)
+}
 CatchUp(need := 0) {
     static busy := false
     if (busy || !MT.HasOwnProp("stepIdx"))
@@ -3397,8 +3415,8 @@ CatchUp(need := 0) {
     try {
         Loop MT.stepIdx - 1 {
             i := A_Index, st := MT.planSteps[i]
-            if (st.HasOwnProp("done") && st.done)
-                continue
+            if (st.k != "place" && st.k != "upgrade" && st.HasOwnProp("done") && st.done)
+                continue                           ; place / upgrade: checked again every time
             if (need > 0 && ReadYen() >= need)    ; the current task can be paid: back to it
                 break
             if (st.k = "place") {
@@ -3436,9 +3454,7 @@ CatchPlace(i, st) {
     have := mine.Length, how := "counted by the macro"
     if (SlotName(st.slot) != "") {                 ; named: only the real cards count
         if !Census() {
-            if !st.HasOwnProp("noCount") || !st.noCount
-                Out("  saving phase: step " i " (" st.text ") - cards could not be counted yet, trying later")
-            st.noCount := true
+            CatchSay(st, "  saving phase: step " i " (" st.text ") - cards could not be counted yet, trying later")
             return false
         }
         have := 0, how := "cards in Unit Overview"
@@ -3455,18 +3471,19 @@ CatchPlace(i, st) {
     }
     if (have >= want) {
         st.done := true
-        Out("  saving phase: step " i " (" st.text ") checked: " have "/" want " " how " - ok")
+        CatchSay(st, "  saving phase: step " i " (" st.text ") checked: " have "/" want " " how " - ok")
         return false
     }
     st.tries := (st.HasOwnProp("tries") && st.tries != "" ? st.tries : 0) + 1
     if (st.tries > 5) {
         st.done := true
-        Out("  saving phase: step " i " (" st.text ") - could not place more, leaving it")
+        CatchSay(st, "  saving phase: step " i " (" st.text ") - could not place more, leaving it")
         return false
     }
     y := ReadYen()
     if (y >= 0 && y < CFG["Cost" st.slot])
         return false
+    st.said := ""
     Out("  saving phase: step " i " (" st.text ") has " have "/" want " (" how ") - placing")
     return PlaceAny(st.slot, st.HasOwnProp("style") ? st.style : "random",
         (st.HasOwnProp("ax") ? {x: st.ax, y: st.ay} : "")) = "ok"
@@ -3512,7 +3529,7 @@ CatchUpgrade(i, st, need) {
             here := here || (v = u)
         if !here
             continue
-        if (!u.HasOwnProp("chk") || u.chk != i) && SlotName(u.slot) != "" {   ; look at the real level
+        if (!u.HasOwnProp("chkAt") || A_TickCount - u.chkAt > 30000) && SlotName(u.slot) != "" {   ; real level (every 30 s)
             if (need > 0 && ReadYen() >= need)
                 return false                       ; back to the current task
             c := CardOf(u)
@@ -3522,7 +3539,7 @@ CatchUpgrade(i, st, need) {
                     if (p.lvl >= 0)
                         u.lvl := p.lvl
                     u.maxed := p.max
-                    u.chk := i
+                    u.chkAt := A_TickCount
                 }
             }
         }
@@ -3532,7 +3549,7 @@ CatchUpgrade(i, st, need) {
     CloseUnitPanel(), MT.panelFor := ""
     if !pending.Length {
         st.done := true
-        Out("  saving phase: step " i " (" st.text ") checked - done")
+        CatchSay(st, "  saving phase: step " i " (" st.text ") checked - all reached")
         return false
     }
     pick := pending[1]

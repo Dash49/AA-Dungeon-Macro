@@ -13,7 +13,8 @@ Users are Thai; talk to them in Thai (issue comments, PR text). Code comments st
 | `settings.example.ini` | example settings, **UTF-16 LE**; copied to `settings.ini` on first run |
 
 Users' own `settings.ini` / `plan.txt` are not in the repo, so updates (F8 > Update, or a new ZIP) never overwrite them.
-The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `Lib/OCR.ahk`.
+The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `Lib/OCR.ahk`, taken from the newest commit SHA (`LatestRaw`) –
+raw `.../main/` is CDN-cached and once overwrote a newer local file with an older one.
 
 `.ahk` files are UTF-8 **with BOM**. Keep the BOM and CRLF-agnostic style; never reformat whole files.
 There is no AutoHotkey on your runner: you cannot run the code (the separate "AHK syntax check" workflow
@@ -56,7 +57,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Saving phase: while an upgrade waits for yen, `CatchUp(need)` (every 3 s) looks back at plan steps 1..current-1
   and stops as soon as the yen covers the current task. `CatchPlace`: real card count (census) vs. all place steps of
   that unit so far – phantom units are forgotten and placed again. `CatchUpgrade`: each target's panel is opened once
-  (`u.chk`) for its real level/MAX, then one level for the furthest behind. Checked steps get `st.done` (reset each match).
+  (`u.chk`) for its real level/MAX, then one level for the furthest behind. Place/upgrade steps are checked EVERY time (user wish, no done-mark; log only on change via `CatchSay`);
+  panel levels re-read at most every 30 s per unit (`u.chkAt`).
   `CatchAuto`: auto switch must be On (turned on if not). Skill presses (`ability`) can't be counted later - not rechecked.
   Census: if the wheel does not move the list, a card picture is clicked first (wakes the list) and it scrolls again. Census bottom part: `BottomCards()` lines the
   bottom cards up with the top ones by unit (not by pixels); `CheckPlaced()` counts twice before re-placing.
