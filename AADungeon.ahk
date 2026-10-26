@@ -100,6 +100,7 @@ LoadConfig() {
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
+        "Speed", 100,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -184,8 +185,16 @@ IsLocked() {
     return !ok
 }
 
-Wait(ms) {
+; Speed (settings, %): 100 = normal, 150 = every pause 1.5x shorter.
+; scaled := false for waits that must stay as written (plan "wait 5")
+Wait(ms, scaled := true) {
     STATE.hb := A_TickCount
+    if scaled {
+        sp := CFG.Get("Speed", 100) + 0
+        sp := (sp < 50) ? 50 : (sp > 250) ? 250 : sp
+        if (sp != 100)
+            ms := Max(40, Round(ms * 100 / sp))
+    }
     t := A_TickCount
     while (A_TickCount - t < ms) {
         Hold()
@@ -1658,7 +1667,7 @@ RunStep(st) {
             if IsObject(u)
                 SetAuto(u)
         case "wait":
-            Wait(st.s * 1000)
+            Wait(st.s * 1000, false)               ; the plan's own wait: never faster
         case "wave":
             while (ReadWave() < st.w) {
                 if MatchOver()
