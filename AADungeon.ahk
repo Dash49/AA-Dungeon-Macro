@@ -2935,8 +2935,8 @@ OverviewScroll(dir) {
     if (mx < PX(1300, "r"))                        ; mouse must be over the list
         return false
     topY := PY(244)                                ; Upg button of the top row when at the top
-    still := false
-    Loop 12 {
+    still := false, ignored := 0
+    Loop 14 {
         if (dir = "WheelUp" && Abs(b[1].y - topY) < 12 * WIN.u) {
             MT.ovOff := 0, MT.ovOk := true         ; at the top: list position known
             return true                            ; already at the top - no wheel at all
@@ -2955,9 +2955,25 @@ OverviewScroll(dir) {
         }
         if (Abs(b[b.Length].y - before) >= 3)
             still := false
+        if (Abs(b[b.Length].y - before) < 3 && dir = "WheelUp"
+            && Abs(b[1].y - topY) >= 12 * WIN.u && ignored < 2) {
+            ignored++                              ; not at the top, yet it did not move: the list
+            ZoomOutKeys(2)                         ; ignored the wheel (the camera may have zoomed)
+            WakeList(b)                            ; click a card picture - that wakes the list
+            Snap()
+            b := ScanCards()
+            if !b.Length
+                return false
+            continue
+        }
         if (Abs(b[b.Length].y - before) < 3) {     ; did not move = end of the list
             if (dir = "WheelUp") {                 ; that notch zoomed the camera in - undo it
                 ZoomOutKeys(2)
+                if (Abs(b[1].y - topY) >= 12 * WIN.u) {
+                    MT.ovOk := false               ; stuck, but not at the top: position unknown
+                    Out("  card list: the wheel does not move it up - list position unknown")
+                    return false
+                }
                 MT.ovOff := 0, MT.ovOk := true     ; at the top
             } else if (MT.HasOwnProp("bottomS") && MT.HasOwnProp("rowH"))
                 BottomOff(b)                       ; at the bottom: known from the census
@@ -2972,6 +2988,17 @@ OverviewScroll(dir) {
     return true
 }
 
+; the list sometimes ignores the wheel until a card was clicked: click the
+; picture of a card (its unit panel opens), close the panel, mouse back over the list
+WakeList(cards) {
+    c := cards[cards.Length]
+    MT.panelClick := A_TickCount
+    ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
+    Wait(300)
+    CloseUnitPanel(), MT.panelFor := ""
+    MouseMove(PX(1580, "r"), PY(540))
+    Wait(200)
+}
 ; first person: Roblox keeps pulling the mouse back to the middle
 IsFirstPerson() {
     MouseMove(PX(400), PY(300))
@@ -3331,8 +3358,11 @@ CardIdx(c) => Round((c.y + MT.ovOff - PY(244)) / MT.rowH) * 2 + (c.x > PX(1633, 
 OvSync(&r) {
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("ovOff"))
         return true
-    if (MT.HasOwnProp("ovFail") && MT.ovFail >= 2)
-        return false                               ; failed twice this match: don't keep scrolling
+    if (MT.HasOwnProp("ovFail") && MT.ovFail >= 2) {
+        if (A_TickCount - MT.ovFailAt < 20000)
+            return false                           ; failed twice: rest 20 s, then try again
+        MT.ovFail := 0
+    }
     if OverviewScroll("WheelUp") {
         Wait(250)
         r := OverviewRead()
@@ -3341,9 +3371,9 @@ OvSync(&r) {
             return true
         }
     }
-    MT.ovFail := (MT.HasOwnProp("ovFail") ? MT.ovFail : 0) + 1
+    MT.ovFail := (MT.HasOwnProp("ovFail") ? MT.ovFail : 0) + 1, MT.ovFailAt := A_TickCount
     if (MT.ovFail = 2)
-        Out("  card list: top of the list not found - using the old card search this match")
+        Out("  card list: top of the list not found - old card search for now, trying again in 20 s")
     return false
 }
 SlotName(sl) => (MT.HasOwnProp("fusedSlot") && MT.fusedSlot = sl) ? MT.fusedName : Trim(CFG.Get("Name" sl, ""))
@@ -3596,8 +3626,10 @@ CheckPlaced() {
     if (MT.HasOwnProp("chkGen") && MT.chkGen = CensusGen())
         return
     MT.chkGen := CensusGen()
-    if !Census()
+    if !Census() {
+        MT.chkGen := ""                            ; not counted: try again at the next upgrade step
         return
+    }
     have := Map(), unk := 0
     for idx, e in MT.cn {
         if e.slot
