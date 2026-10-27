@@ -3536,7 +3536,10 @@ BottomCards(r2) {
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("rowH") && MT.rowH)
         sEst := Round((MT.ovOff + (r2.cards[1].y - PY(244))) / MT.rowH) * 2
     bestS := -1, bestBad := 99, bestOv := 0
-    sh := 0
+    ; the list scrolls by whole rows of 2: the first card shown in the left
+    ; column = an even shift, in the right column = an odd one
+    par := (r2.cards[1].x > PX(1633, "r")) ? 1 : 0
+    sh := par
     while (sh <= 16) {
         ov := 0, bad := 0
         for i, bc in bot
@@ -3547,7 +3550,7 @@ BottomCards(r2) {
             if (bestS < 0 || better)
                 bestS := sh, bestBad := bad, bestOv := ov
         }
-        sh++
+        sh += 2
     }
     if (bestS < 0) {
         Out("  card list: the bottom cards don't line up with the top ones - not counting")
@@ -3562,7 +3565,11 @@ BottomCards(r2) {
             MT.cn[i + bestS] := bc
     MT.bottomS := bestS, MT.bottomGen := MT.cnGen
     BottomOff(r2.cards)
-    Out("  card list: bottom part = cards " (bestS + 1) "-" (bestS + bot.Length) " (" bestOv " overlap" (bestBad ? ", 1 unsure" : "") ")")
+    ovN := ""                                      ; the overlap: same cards seen in both looks
+    Loop bestOv
+        ovN .= (ovN = "" ? "" : ", ") (bestS + A_Index) "=" bot[A_Index].name
+    Out("  card list: bottom part = cards " (bestS + 1) "-" (bestS + bot.Length) " (" bestOv " overlap" (bestBad ? ", 1 unsure" : "")
+        . ": " ovN " counted once)")
     return true
 }
 ; list at its bottom: set the offset so CardIdx gives the census numbers
