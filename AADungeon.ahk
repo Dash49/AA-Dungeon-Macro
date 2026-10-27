@@ -1985,12 +1985,14 @@ IsRed(col) {
         || (r >= 80 && g < 45 && b < 45 && r - Max(g, b) > 55)   ; dark red on a black floor (Shop room)
 }
 ; red points on the map (ref coords) from the last Snap -> Map(key -> [x, y])
-RedGrid(step := 12) {
+; wide = the whole screen (the path may show only at the edges when the
+; camera is far from it, e.g. Mountain Temple); else the middle part
+RedGrid(step := 12, wide := false) {
     m := Map()
-    y := 170
-    while (y <= 900) {
-        sy := PY(y), x := 130
-        while (x <= 1780) {
+    y := wide ? 20 : 170
+    while (y <= (wide ? 1060 : 900)) {
+        sy := PY(y), x := wide ? 10 : 130
+        while (x <= (wide ? 1910 : 1780)) {
             if IsRed(Color(PX(x), sy))
                 m[x * 4096 + y] := [x, y]
             x += step
@@ -2514,6 +2516,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     Snap()
     base := (n0 >= 0) ? Max(ScanCards().Length, MT.units.Length) : 0
     before := RedGrid()                            ; red things that are part of the map
+    beforeW := RedGrid(12, true)                   ; (the same, whole screen)
     beforeG := IsHill(slot) ? GreenGrid() : ""     ; green things that are part of the map
     Key(slot)
     Wait(170)
@@ -2527,6 +2530,17 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             break
         if (A_Index < 3)
             Wait(120)
+    }
+    if (path.Length < 20) {                        ; the path may show only at the screen edges
+        pw := []
+        for k, pt in RedGrid(12, true)
+            if !beforeW.Has(k)
+                pw.Push(pt)
+        if (pw.Length >= 20) {
+            path := pw
+            if !MT.HasOwnProp("edgeLogged")
+                MT.edgeLogged := true, Out("  unit " slot ": the red path is only at the screen edges (" pw.Length " points) - placing near it there")
+        }
     }
     ; Is the unit really in hand? Held = red path + "Place / Rotate / Cancel"
     ; next to the mouse. Not held (key lost, game not focused): press the
