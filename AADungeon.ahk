@@ -1131,7 +1131,7 @@ RoomMap() {
         prev := RegExMatch(ln.t, "i)Dungeon\s*Room")
     }
     if (name != "")
-        Out("  room map: " name)
+        Out("  room map: " KnownMap(name))
     ShotUi("room")                                 ; the room card that is about to be entered
     RS.stage := "", RS.stageWalked := false        ; this card decides it
     StageCheck(r.t)
@@ -1156,6 +1156,23 @@ LoadingMap(r) {
         }
         prev := prev || RegExMatch(ln.t, "i)Travel+ing\s*to")
     }
+}
+; the closest name in maps_seen.txt ("Sacred JP lane t" -> Sacred Planet), else the text as read
+KnownMap(name) {
+    f := A_ScriptDir "\maps_seen.txt", a := MapKey(name), best := "", bestV := 0.7
+    if (StrLen(a) < 3 || !FileExist(f))
+        return name
+    try {
+        for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r") {
+            b := MapKey(ln)
+            if (StrLen(b) < 3)
+                continue
+            v := 1 - NameDist(a, b) / Max(StrLen(a), StrLen(b))
+            if (v > bestV)
+                bestV := v, best := Trim(ln)
+        }
+    }
+    return (best != "") ? best : name
 }
 ; every map name seen goes to maps_seen.txt (F8 > ด่าน lists them)
 MapSeen(name) {
@@ -2558,7 +2575,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     fails := 0
     yb := yen0, ybAt := A_TickCount                ; yen just before the click (income comes fast late)
     for c in cands {
-        if (n0 < 0 && yen0 > 0 && A_TickCount - ybAt > 1500) {
+        if (n0 < 0 && (yb <= 0 || A_TickCount - ybAt > 1500)) {
             v := ReadYenOnce()
             if (v >= 0)
                 yb := v
@@ -2571,6 +2588,25 @@ PlaceUnit(slot, style := "random", pt0 := "") {
         for pt in watch
             red += IsRed(Color(PX(pt[1]), PY(pt[2])))
         if (red * 4 < watch.Length) {              ; the path is not red any more
+            onUnit := false                        ; did the click hit a unit already standing
+            if (n0 < 0) {                          ; there? (its panel opens) - then only a
+                Loop 3 {                           ; real yen drop counts as placed
+                    if (A_Index > 1)
+                        Wait(90, false), Snap()
+                    if UnitPanelVisible() {
+                        onUnit := true
+                        break
+                    }
+                }
+                if onUnit {
+                    CloseUnitPanel()
+                    if (yb <= 0) {                 ; no yen to tell: not placed
+                        Out("  unit " slot ": " Round(c.x) "," Round(c.y) " is a unit already there (its panel opened) - trying again")
+                        MT.bad.Push(c)
+                        return "fail"
+                    }
+                }
+            }
             if !MT.HasOwnProp("fake")
                 MT.fake := Map()
             if (n0 >= 0 && MT.fake.Get(slot, 0) < 3) { ; did a card really appear?
@@ -2608,7 +2644,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     if (y1 >= 0 && y1 <= yb - drop)
                         break
                 }
-                if (y1 > yb + 50)                  ; income came in meanwhile: can't tell - trust the path
+                if (y1 > yb + 50 && !onUnit)       ; income came in meanwhile: can't tell - trust the path
                     Out("  unit " slot ": yen went up (" yb " -> " y1 ") - trusting the red path")
                 else if (y1 >= 0 && y1 > yb - drop) {
                     capT := OcrRef(300, 520, 1620, 900, 1)
@@ -2635,7 +2671,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
                 MT.lastGroup := {x: c.x, y: c.y}
             Out("  placed unit " slot " #" n " at " Round(c.x) "," Round(c.y) " (try " fails + 1
-                . (style != "random" ? ", " style : "") ")")
+                . (style != "random" ? ", " style : "") ")" (n0 < 0 && IsSet(y1) && yb > 0 ? "  (yen " yb " -> " y1 ")" : ""))
             return "ok"
         }
         MT.bad.Push(c)
@@ -2730,10 +2766,12 @@ CloseUnitPanel() {
         return false
     Loop 2 {
         ClickAt(x, y)                              ; its red X
-        Wait(350)
-        Snap()
-        if !UnitPanelVisible(&x, &y)
-            return true
+        Loop 6 {                                   ; gone in ~0.1-0.3 s
+            Wait(70, false)
+            Snap()
+            if !UnitPanelVisible(&x, &y)
+                return true
+        }
     }
     return false
 }
@@ -3336,20 +3374,25 @@ PanelTitle(c) {
     CloseUnitPanel()
     MT.panelClick := A_TickCount
     ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
-    t := ""
-    if WaitPanelData(900) {                        ; the left reader saw it
-        wp := WatchedPanel()
+    t := "", t0 := A_TickCount, seen := 0
+    Wait(120, false)
+    while (A_TickCount - t0 < 1400) {              ; the panel shows in ~0.2-0.4 s
+        wp := WatchedPanel()                       ; the left reader already read it
         if (IsObject(wp) && wp.name != "") {
-            CloseUnitPanel()
-            return wp.name
-        }
-    }
-    Loop 2 {
-        Wait(A_Index = 1 ? 100 : 400)              ; (already waited for the panel above)
-        r := OcrRef(20, 315, 300, 415, 2, "l", "c")          ; title only
-        t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
-        if (t != "")
+            t := wp.name
             break
+        }
+        Snap()
+        if UnitPanelVisible() {
+            if (++seen >= 2) {                     ; shown twice in a row: the title is drawn
+                r := OcrRef(20, 315, 300, 415, 2, "l", "c")          ; title only
+                t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
+                if (t != "")
+                    break
+            }
+        } else
+            seen := 0
+        Wait(70, false)
     }
     CloseUnitPanel()
     return t
