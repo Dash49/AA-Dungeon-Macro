@@ -1895,10 +1895,16 @@ WatchYenMsg(wParam, lParam, msg, hwnd) {
     STATE.wYen := wParam, STATE.wAt := A_TickCount
 }
 WatchedYen(maxAge) {                               ; the watcher's yen, -2 = none / too old
-    if (STATE.HasOwnProp("wAt") && A_TickCount - STATE.wAt <= maxAge)
+    if (STATE.HasOwnProp("wAt") && A_TickCount - STATE.wAt <= maxAge
+        && STATE.wAt >= SpentAt() + 300)             ; read after the last upgrade click
         return STATE.wYen
     return -2
 }
+; an upgrade was just bought: yen read before this moment is too high now
+Spent() {
+    STATE.spentAt := A_TickCount
+}
+SpentAt() => STATE.HasOwnProp("spentAt") ? STATE.spentAt : 0
 
 ; ---- multitasking while saving -------------------------------------
 ; AHK runs one thing at a time, so "multitasking" is cooperative: the
@@ -1910,7 +1916,7 @@ YenNow() {                                         ; yen, read at most every 0.2
     w := WatchedYen(500)
     if (w >= 0)
         return w
-    if (STATE.HasOwnProp("yenAt") && A_TickCount - STATE.yenAt < 250)
+    if (STATE.HasOwnProp("yenAt") && A_TickCount - STATE.yenAt < 250 && STATE.yenAt > SpentAt())
         return STATE.yen
     v := ReadYenOnce()
     STATE.yenAt := A_TickCount
@@ -2459,11 +2465,17 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     beforeG := IsHill(slot) ? GreenGrid() : ""     ; green things that are part of the map
     Key(slot)
     Wait(170)
-    Snap()
-    path := []
-    for k, pt in RedGrid()
-        if !before.Has(k)
-            path.Push(pt)
+    Loop 3 {                                       ; the game can be slow to show it: look again
+        Snap()
+        path := []
+        for k, pt in RedGrid()
+            if !before.Has(k)
+                path.Push(pt)
+        if (path.Length >= 20)
+            break
+        if (A_Index < 3)
+            Wait(120)
+    }
     ; Is the unit really in hand? Held = red path + "Place / Rotate / Cancel"
     ; next to the mouse. Not held (key lost, game not focused): press the
     ; unit's picture on the hotbar, then press the key again.
@@ -3803,8 +3815,8 @@ UpgradeOnce(u) {
 ; read the open unit panel -> {name, lvl, max, cost, bx, by} or ""
 PanelInfo() {
     wp := WatchedPanel()                           ; the left reader already read it
-    if IsObject(wp)
-        return wp
+    if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "")
+        return wp                                  ; (level unread there: read it here)
     r := OcrRef(0, 300, 600, 720, 2, "l", "c")
     if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
@@ -3890,6 +3902,7 @@ UpgradeByPanel(u) {
     if !p.by
         return "poor"                              ; no Upgrade button seen
     MT.panelClick := A_TickCount
+    Spent()
     ClickAt(p.bx, p.by)
     WaitPanelData(700)
     p2 := PanelInfo()
@@ -3928,6 +3941,7 @@ UpgradeByCard(u) {
         Out("  [check] unit " u.slot " #" u.n ": card at " Round(c.x) "," Round(c.y) "  bar " lv.lvl "/" lv.max "  button " (c.buy ? "green" : "grey"))
     if !c.buy                                       ; greyed button = not enough yen
         return "poor"
+    Spent()
     ClickAt(c.x, c.y)
     Wait(350)
     c2 := CardOf(u)
