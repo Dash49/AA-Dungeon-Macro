@@ -4147,11 +4147,15 @@ PanelInfo() {
         p.cost := Integer(RegExReplace(m[1], "\D"))
     if (p.lvl < 0 && !p.max)
         p.lvl := PanelLevel()                      ; the small "Upgrade [n]" box alone, bigger
-    best := ""
-    for w in Words(r)                              ; the big button = the lowest "Upgrade" word
-        if (RegExMatch(w.t, "i)^upgrade") && (!IsObject(best) || w.y > best.y))
-            best := w
-    if (IsObject(best) && best.y > PY(520))
+    best := "", top := ""
+    for w in Words(r)                              ; the big button = the lowest "Upgrade" word,
+        if RegExMatch(w.t, "i)^upgrade") {         ; well below the "Upgrade [n]" box (the panel
+            if (!IsObject(best) || w.y > best.y)   ; can sit higher or lower on the screen)
+                best := w
+            if (!IsObject(top) || w.y < top.y)
+                top := w
+        }
+    if (IsObject(best) && (best.y - top.y > 110 * WIN.u || best.y > PY(520)))
         p.bx := best.x, p.by := best.y
     else if (!p.max && RegExMatch(t, "i)\bMax\b"))
         p.max := true                              ; button says Max
