@@ -1784,16 +1784,43 @@ FirstUnit(slot) {
     return ""
 }
 
+; ---- multitasking while saving -------------------------------------
+; AHK runs one thing at a time, so "multitasking" is cooperative: the
+; checking work (card count, panel levels, old steps) asks Preempt()
+; between every card / unit, and stops as soon as the yen covers the
+; current task (MT.need). The current task then runs at once, and the
+; checking goes on afterwards from where it stopped.
+YenNow() {                                         ; yen, read at most every 0.25 s
+    if (STATE.HasOwnProp("yenAt") && A_TickCount - STATE.yenAt < 250)
+        return STATE.yen
+    v := ReadYenOnce()
+    STATE.yenAt := A_TickCount
+    if (v >= 0 || !STATE.HasOwnProp("yen"))
+        STATE.yen := v
+    return STATE.yen
+}
+Preempt() {                                        ; true = drop the checking, pay the current task
+    if !(MT.HasOwnProp("need") && MT.need > 0) || (MT.HasOwnProp("paying") && MT.paying)
+        return false
+    y := YenNow()
+    return (y >= 0 && y >= MT.need)
+}
 WaitYen(cost, timeout) {
     t := A_TickCount
     Loop {
         y := ReadYen()
-        if (y < 0 || y >= cost)
+        if (y < 0 || y >= cost) {
+            MT.need := 0
             return true
-        if (A_TickCount - t > timeout || MatchOver())
+        }
+        if (A_TickCount - t > timeout || MatchOver()) {
+            MT.need := 0
             return false
+        }
         Status("saving yen " y "/" cost)
-        Wait(500)
+        MT.need := cost
+        if !CatchUp()                              ; meanwhile: check / fix the earlier steps
+            Wait(300)
     }
 }
 
@@ -3152,6 +3179,10 @@ NameCards(r) {
         c.idx := CardIdx(c)
         if MT.cn.Has(c.idx)
             continue
+        if Preempt() {                             ; yen for the current task: stop here
+            MT.cenAbort := true                    ; (names read so far are kept)
+            return
+        }
         t := PanelTitle(c), how := "panel"         ; click every card: its big name
         if (t = "") {                              ; panel not readable: the small name
             if !IsObject(small)
@@ -3181,11 +3212,16 @@ Census() {
     gen := CensusGen()
     if (MT.HasOwnProp("cenGen") && MT.cenGen = gen)
         return MT.cenOk
+    MT.cenAbort := false
     r := OverviewOpen()
     MT.ovOk := false                               ; always count from the top of the list
     if !(r.open && r.cards.Length) || !OvSync(&r)
         return false
     NameCards(r)
+    if MT.cenAbort {
+        Out("  card count paused - yen is ready for the current upgrade")
+        return false
+    }
     full := (r.cards.Length < 7)                   ; the whole list fits on the screen
     aligned := false
     if !full {                                     ; only 8 show: scroll to the end, read the rest
@@ -3213,6 +3249,10 @@ Census() {
             aligned := BottomCards(r2)
             break
         }
+    }
+    if MT.cenAbort {                               ; paused for the current task: not counted yet
+        Out("  card count paused - yen is ready for the current upgrade")
+        return false
     }
     N := 0
     for idx in MT.cn
@@ -3244,6 +3284,10 @@ BottomCards(r2) {
         topS.Pop()
     small := "", bot := []
     for i, c in r2.cards {
+        if Preempt() {
+            MT.cenAbort := true
+            return false
+        }
         title := PanelTitle(c), how := "panel"     ; click every card: its big name
         if (title = "") {
             if !IsObject(small)
@@ -3417,7 +3461,7 @@ CatchUp(need := 0) {
             i := A_Index, st := MT.planSteps[i]
             if (st.k != "place" && st.k != "upgrade" && st.HasOwnProp("done") && st.done)
                 continue                           ; place / upgrade: checked again every time
-            if (need > 0 && ReadYen() >= need)    ; the current task can be paid: back to it
+            if Preempt()                           ; the current task can be paid: back to it
                 break
             if (st.k = "place") {
                 did := CatchPlace(i, st)
@@ -3480,6 +3524,8 @@ CatchPlace(i, st) {
         CatchSay(st, "  saving phase: step " i " (" st.text ") - could not place more, leaving it")
         return false
     }
+    if Preempt()
+        return false
     y := ReadYen()
     if (y >= 0 && y < CFG["Cost" st.slot])
         return false
@@ -3530,7 +3576,7 @@ CatchUpgrade(i, st, need) {
         if !here
             continue
         if (!u.HasOwnProp("chkAt") || A_TickCount - u.chkAt > 30000) && SlotName(u.slot) != "" {   ; real level (every 30 s)
-            if (need > 0 && ReadYen() >= need)
+            if Preempt()
                 return false                       ; back to the current task
             c := CardOf(u)
             if IsObject(c) {
@@ -3767,6 +3813,7 @@ UpgradeByCard(u) {
 ; goal: "max", a level number, or "plus" (+plus levels from now)
 UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
     r := UpgradeSteps(slots, goal, plus, style, untilWave, timeout)
+    MT.need := 0
     CloseUnitPanel(), MT.panelFor := ""            ; the unit panel stays open while upgrading
     return r
 }
@@ -3819,9 +3866,13 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
             for u in pending
                 if (u.lvl < pick.lvl)
                     pick := u
+        MT.paying := true                          ; the current task itself: never pre-empted
         r := UpgradeOnce(pick)
-        if (r = "ok")
+        MT.paying := false
+        if (r = "ok") {
+            MT.need := 0
             Out("  unit " pick.slot " #" pick.n (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
+        }
         else if (r = "lost") {
             if FixFirstPerson()                     ; that was the reason - try again
                 continue
@@ -3834,14 +3885,13 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
             Out("  unit " pick.slot " #" pick.n ": card not found in Unit Overview")
             pick.maxed := true                      ; give up on it
         } else if (r = "poor") {
-            if (A_TickCount - lastCatch > 3000) {  ; saving: finish earlier steps meanwhile
-                lastCatch := A_TickCount
-                if CatchUp(pick.HasOwnProp("needYen") ? pick.needYen : 0)
-                    continue
-            }
+            MT.need := (pick.HasOwnProp("needYen") && pick.needYen > 0) ? pick.needYen : 0
+            if Preempt()                           ; the yen is there now: upgrade at once
+                continue
             if (SlotName(pick.slot) = "")
                 Status("saving yen for unit " pick.slot)
-            Wait(700)
+            if !CatchUp()                          ; saving: check / fix earlier steps meanwhile
+                Wait(250)
         }
     }
 }

@@ -62,6 +62,10 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   `CatchAuto`: auto switch must be On (turned on if not). Skill presses (`ability`) can't be counted later - not rechecked.
   Census: if the wheel does not move the list, a card picture is clicked first (wakes the list) and it scrolls again. Census bottom part: `BottomCards()` lines the
   bottom cards up with the top ones by unit (not by pixels); `CheckPlaced()` counts twice before re-placing.
+- Multitasking (cooperative – AHK has one thread; timers must stay short and must not click): while the current
+  task waits for yen (`MT.need`, set in the upgrade loop and in `WaitYen`), `CatchUp()` runs back to back. All checking
+  work asks `Preempt()` (yen via `YenNow()`, re-read every 0.25 s) between cards/units and stops when the yen covers
+  `MT.need`; the census keeps the names read so far and resumes later. `MT.paying` = the current task runs (no pre-emption).
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
   `OverviewScroll` scrolls one notch at a time – an extra wheel notch at the list end zooms the
   camera into first person (a classic bug). `FixFirstPerson()` repairs that.
