@@ -3665,8 +3665,8 @@ CatchUp(need := 0) {
     try {
         Loop MT.stepIdx - 1 {
             i := A_Index, st := MT.planSteps[i]
-            if (st.k != "place" && st.k != "upgrade" && st.HasOwnProp("done") && st.done)
-                continue                           ; place / upgrade: checked again every time
+            if (st.HasOwnProp("done") && st.done)
+                continue                           ; checked and ok once: marked, never again this match
             if Preempt()                           ; the current task can be paid: back to it
                 break
             if (st.k = "place") {
@@ -3721,7 +3721,7 @@ CatchPlace(i, st) {
     }
     if (have >= want) {
         st.done := true
-        CatchSay(st, "  saving phase: step " i " (" st.text ") checked: " have "/" want " " how " - ok")
+        CatchSay(st, "  saving phase: step " i " (" st.text ") checked: " have "/" want " " how " - ok, marked done")
         return false
     }
     st.tries := (st.HasOwnProp("tries") && st.tries != "" ? st.tries : 0) + 1
@@ -3801,7 +3801,7 @@ CatchUpgrade(i, st, need) {
     CloseUnitPanel(), MT.panelFor := ""
     if !pending.Length {
         st.done := true
-        CatchSay(st, "  saving phase: step " i " (" st.text ") checked - all reached")
+        CatchSay(st, "  saving phase: step " i " (" st.text ") checked - all reached, marked done")
         return false
     }
     pick := pending[1]
