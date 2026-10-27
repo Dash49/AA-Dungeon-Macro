@@ -348,9 +348,8 @@ ReadYenOnce() {
         return -1
     best := ""
     for ln in Lines(r) {
-        t := RegExReplace(ln.t, "(?<=\d)[ ,.'](?=\d)", "")
-        if RegExMatch(t, "^\s*[+-]")                   ; "+202" / "-550" popups
-            continue
+        t := RegExReplace(ln.t, "[+-]\s*\d[\d,.']*", " ")  ; "+202" / "-550" popups (also on the yen line)
+        t := RegExReplace(t, "(?<=\d)[ ,.'](?=\d)", "")
         pos := 1
         while (pos := RegExMatch(t, "\d+", &m, pos)) {
             if (StrLen(m[0]) > StrLen(best))
