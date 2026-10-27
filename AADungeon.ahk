@@ -4079,7 +4079,7 @@ PanelInfo() {
     wp := WatchedPanel()                           ; the left reader already read it
     if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "" && (wp.by || wp.max))
         return wp                                  ; (level or button missing there: read it here)
-    r := OcrRef(0, 300, 600, 720, 2, "l", "c")
+    r := OcrRef(0, 300, 600, 790, 2, "l", "c")             ; (taller panel with DMG rows: button lower)
     if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
     t := RegExReplace(r.t, "\s+", " ")
