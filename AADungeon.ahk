@@ -2520,27 +2520,28 @@ PlaceUnit(slot, style := "random", pt0 := "") {
     beforeG := IsHill(slot) ? GreenGrid() : ""     ; green things that are part of the map
     Key(slot)
     Wait(170)
-    Loop 3 {                                       ; the game can be slow to show it: look again
-        Snap()
+    Loop 9 {                                       ; the game can be slow to show it (it fades in
+        Snap()                                     ; on some maps): look again, up to ~1.2 s
         path := []
         for k, pt in RedGrid()
             if !before.Has(k)
                 path.Push(pt)
         if (path.Length >= 20)
             break
-        if (A_Index < 3)
-            Wait(120)
-    }
-    if (path.Length < 20) {                        ; the path may show only at the screen edges
-        pw := []
-        for k, pt in RedGrid(12, true)
-            if !beforeW.Has(k)
-                pw.Push(pt)
-        if (pw.Length >= 20) {
-            path := pw
-            if !MT.HasOwnProp("edgeLogged")
-                MT.edgeLogged := true, Out("  unit " slot ": the red path is only at the screen edges (" pw.Length " points) - placing near it there")
+        if (A_Index >= 3) {                        ; the path may show only at the screen edges
+            pw := []
+            for k, pt in RedGrid(12, true)
+                if !beforeW.Has(k)
+                    pw.Push(pt)
+            if (pw.Length >= 20) {
+                path := pw
+                if !MT.HasOwnProp("edgeLogged")
+                    MT.edgeLogged := true, Out("  unit " slot ": the red path is only at the screen edges (" pw.Length " points) - placing near it there")
+                break
+            }
         }
+        if (A_Index < 9)
+            Wait(110, false)
     }
     ; Is the unit really in hand? Held = red path + "Place / Rotate / Cancel"
     ; next to the mouse. Not held (key lost, game not focused): press the
