@@ -81,10 +81,10 @@ WatchLeft() {
 LvlNum(s) {
     s := StrReplace(StrReplace(StrReplace(StrReplace(s, "O", "0", false), "S", "5", false), "A", "4", false), "I", "1", false)
     s := StrReplace(s, "l", "1", false)
-    return IsDigit(s) ? Integer(s) : -1
+    return (IsDigit(s) && Integer(s) <= 20) ? Integer(s) : -1   ; ("[2]1" read as 21: not a level)
 }
 PanelRead() {
-    r := OcrRef(0, 300, 600, 790, 2, "l", "c")             ; (taller panel with DMG rows: button lower)
+    r := OcrRef(0, 300, 600, 900, 2, "l", "c")             ; (taller panel with DMG / ability rows: button lower)
     if !(IsObject(r) && (InStr(r.t, "pgrade") || RegExMatch(r.t, "i)\bMax\b")))
         return ""
     t := RegExReplace(r.t, "\s+", " ")
