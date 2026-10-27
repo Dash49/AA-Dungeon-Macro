@@ -2042,8 +2042,8 @@ AddCand(cands, cells, x, y, gap, maxN) {
             if IsRed(Color(PX(x + o[1]), PY(y + o[2])))
                 return false
     }
-    for v in MT.units
-        if (Abs(v.x - x) < 32 && Abs(v.y - y) < 28)
+    for v in MT.units                              ; room between units: a click on one must not hit the next
+        if (Abs(v.x - x) < 40 && Abs(v.y - y) < 34)
             return false
     for bd in MT.bad
         if (Abs(bd.x - x) < 16 && Abs(bd.y - y) < 14)
@@ -4026,6 +4026,12 @@ SpotPanel(u) {
 ReplaceUnit(u) {
     nm := SlotName(u.slot)
     for dy in [-20, -40] {
+        twin := false                              ; that spot is another copy's spot: not this one
+        for v in MT.units
+            if (v != u && v.slot = u.slot && Abs(v.x - u.x) < 35 && Abs(v.y - (u.y + dy)) < 30)
+                twin := true
+        if twin
+            continue
         CloseUnitPanel()
         MT.panelClick := A_TickCount
         ClickRef(u.x, u.y + dy)
