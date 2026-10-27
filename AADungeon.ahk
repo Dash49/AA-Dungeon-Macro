@@ -390,14 +390,13 @@ ReadYen() {
     w := WatchedYen(300)                           ; fresh from AAWatch.ahk: no OCR here
     if (w >= 0)
         return w
-    best := -1
-    Loop 2 {
-        v := ReadYenOnce()
-        best := Max(best, v)
-        if (A_Index = 1)
-            Sleep 90
-    }
-    return best
+    a := ReadYenOnce()
+    Sleep 90
+    b := ReadYenOnce()
+    if (a < 0 || b < 0)
+        return Max(a, b)
+    ; two reads far apart: OCR glued an extra digit on one of them - the smaller is the yen
+    return (Max(a, b) > Min(a, b) * 1.3 + 50) ? Min(a, b) : Max(a, b)
 }
 
 ReadYenOnce() {
@@ -1931,6 +1930,14 @@ WatchedMatch() {
     return STATE.wMatch.st
 }
 WatchYenMsg(wParam, lParam, msg, hwnd) {
+    ; a sudden big jump up is an OCR slip ("2197 +57" -> 219757) until a 2nd read agrees
+    if (STATE.HasOwnProp("wYen") && A_TickCount - STATE.wAt < 3000 && wParam > STATE.wYen * 3 + 20000) {
+        if !(STATE.HasOwnProp("wJump") && Abs(STATE.wJump - wParam) <= Max(50, wParam // 20)) {
+            STATE.wJump := wParam
+            return
+        }
+    }
+    STATE.wJump := -1
     STATE.wYen := wParam, STATE.wAt := A_TickCount
 }
 WatchedYen(maxAge) {                               ; the watcher's yen, -2 = none / too old
@@ -4159,7 +4166,29 @@ PanelInfo() {
         p.bx := best.x, p.by := best.y
     else if (!p.max && RegExMatch(t, "i)\bMax\b"))
         p.max := true                              ; button says Max
+    else if GreenUpgradeButton(&gx, &gy)           ; text not read: the green button by colour
+        p.bx := gx, p.by := gy
     return p
+}
+; the green Upgrade button on the unit panel's bottom row (right of First / Sell), by colour
+GreenUpgradeButton(&x, &y) {
+    Snap()
+    n := 0, sx := 0, sy := 0
+    yy := 600
+    while (yy <= 720) {
+        xx := 290
+        while (xx <= 540) {
+            c := RGB(Color(PX(xx, "l"), PY(yy)))
+            if (c.g > 100 && c.g > c.r + 40 && c.g > c.b + 40)
+                n++, sx += xx, sy += yy
+            xx += 5
+        }
+        yy += 5
+    }
+    if (n < 40)
+        return false
+    x := PX(sx / n, "l"), y := PY(sy / n)
+    return true
 }
 ; the unit panel of card c: click its picture (unless that panel is open)
 PanelOf(u, c) {
