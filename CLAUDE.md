@@ -8,7 +8,7 @@ Users are Thai; talk to them in Thai (issue comments, PR text). Code comments st
 |---|---|
 | `AADungeon.ahk` | the macro (one file, ~2300 lines) |
 | `AASettings.ahk` | Thai settings window (F8) for plan.txt / settings.ini, bug report (F9) |
-| `AAWatch.ahk` | helper process started by the macro (`StartWatchers`): reads the yen every 0.15 s and posts it (msg 0x5A01) to the macro window; never clicks; quits when the macro window is gone. Its screen helpers are copies – keep them in step |
+| `AAWatch.ahk` | 3 reader processes started by the macro (`StartWatchers`), they never click: `yen` (0.15 s, PostMessage 0x5A01), `left` unit panel (0.25 s, WM_COPYDATA code 2), `right` Unit Overview cards (code 3) + match state play/end (code 4, 1 s). Each message carries the capture tick; the macro uses it only if newer than its last click (`MT.panelClick`, `MT.ovMoveAt`) – `WatchedPanel/WatchedCards/WatchedMatch`, else its own OCR. Screen helpers there are copies – keep them in step |
 | `Lib/OCR.ahk` | Descolada's Windows OCR wrapper – third party, do not edit |
 | `plan.example.txt` | example plan; copied to the user's `plan.txt` on first run |
 | `settings.example.ini` | example settings, **UTF-16 LE**; copied to `settings.ini` on first run |

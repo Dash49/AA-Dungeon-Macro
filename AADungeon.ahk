@@ -89,6 +89,7 @@ Status("AA Dungeon ready - F2 start")
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 OnError(ErrLog)                                     ; script errors go to the log too
 OnMessage(0x5A01, WatchYenMsg)                      ; the yen from AAWatch.ahk
+OnMessage(0x4A, WatchCopy)                          ; panel / cards / match from AAWatch.ahk
 OnExit((*) => StopWatchers())
 if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
     Out("Restarted after being stuck - starting again in 5 s")
@@ -1729,7 +1730,10 @@ ReadHotbarCosts() {
 MatchOver() {
     static last := 0
     STATE.hb := A_TickCount
-    if (A_TickCount - last < 1500)
+    wm := WatchedMatch()                           ; the right reader looks once a second
+    if (wm = "play" && A_TickCount - last < 6000)
+        return false
+    if (A_TickCount - last < (wm = "end" ? 500 : 1500))
         return false
     last := A_TickCount
     s := Screen()
@@ -1798,16 +1802,94 @@ StartWatchers() {
     f := A_ScriptDir "\AAWatch.ahk"
     if !FileExist(f)
         return Out("AAWatch.ahk not found - reading the yen here (slower)")
-    try {
-        Run('"' A_AhkPath '" "' f '" ' A_ScriptHwnd, A_ScriptDir, , &pid)
-        STATE.watchPid := pid
-        Out("yen watcher started (AAWatch.ahk)")
+    STATE.watchPids := []
+    for md in ["yen", "left", "right"] {           ; 3 readers, each its own process
+        try {
+            Run('"' A_AhkPath '" "' f '" ' A_ScriptHwnd " " md, A_ScriptDir, , &pid)
+            STATE.watchPids.Push(pid)
+        }
     }
+    Out("screen readers started (AAWatch.ahk: yen, left panel, right cards + match): " STATE.watchPids.Length)
 }
 StopWatchers() {
-    if (STATE.HasOwnProp("watchPid") && STATE.watchPid)
-        try ProcessClose(STATE.watchPid)
-    STATE.watchPid := 0
+    if STATE.HasOwnProp("watchPids")
+        for pid in STATE.watchPids
+            try ProcessClose(pid)
+    STATE.watchPids := []
+}
+; texts from the readers: 2 = unit panel, 3 = Unit Overview cards, 4 = match state
+WatchCopy(wParam, lParam, msg, hwnd) {
+    try {
+        code := NumGet(lParam, 0, "Ptr")
+        txt := StrGet(NumGet(lParam, 2 * A_PtrSize, "Ptr"), "UTF-16")
+        if (code = 2) {
+            f := StrSplit(txt, Chr(31))
+            if (f.Length >= 7)
+                STATE.wPanel := {at: Integer(f[1]), name: f[2], lvl: Integer(f[3]), max: (f[4] = "1"),
+                    cost: Integer(f[5]), bx: Integer(f[6]), by: Integer(f[7]), none: false}
+            else
+                STATE.wPanel := {at: Integer(f[1]), none: true}
+        } else if (code = 3) {
+            recs := StrSplit(txt, Chr(30)), list := []
+            closed := (recs.Length >= 2 && recs[2] = "-")
+            if !closed
+                Loop recs.Length - 1 {
+                    f := StrSplit(recs[A_Index + 1], Chr(31))
+                    if (f.Length >= 4)
+                        list.Push({x: Integer(f[1]), y: Integer(f[2]), buy: (f[3] = "1"), name: f[4]})
+                }
+            STATE.wCards := {at: Integer(recs[1]), closed: closed, cards: list}
+        } else if (code = 4) {
+            f := StrSplit(txt, Chr(31))
+            STATE.wMatch := {at: Integer(f[1]), st: (f.Length >= 2) ? f[2] : "?"}
+        }
+    }
+    return true
+}
+; the panel as the left reader saw it AFTER the macro's last click there
+WatchedPanel() {
+    if !STATE.HasOwnProp("wPanel")
+        return ""
+    p := STATE.wPanel, after := MT.HasOwnProp("panelClick") ? MT.panelClick : 0
+    if (p.none || p.at < after + 200 || A_TickCount - p.at > 900)
+        return ""
+    return {name: p.name, lvl: p.lvl, max: p.max, cost: p.cost, bx: p.bx, by: p.by}
+}
+; wait (0.25 .. maxMs) until the left reader has seen the panel after the click
+WaitPanelData(maxMs) {
+    if !(STATE.HasOwnProp("watchPids") && STATE.watchPids.Length) {
+        Wait(450)                                  ; no readers: the old fixed wait
+        return false
+    }
+    t := A_TickCount
+    Wait(250)
+    while (A_TickCount - t < maxMs) {
+        if IsObject(WatchedPanel())
+            return true
+        Wait(50, false)
+    }
+    return false
+}
+; card names as the right reader saw them (same cards, after the list last moved)
+WatchedCards(cards) {
+    if !STATE.HasOwnProp("wCards")
+        return ""
+    w := STATE.wCards, moved := MT.HasOwnProp("ovMoveAt") ? MT.ovMoveAt : 0
+    if (w.closed || w.at < moved + 250 || A_TickCount - w.at > 1500 || w.cards.Length != cards.Length)
+        return ""
+    names := []
+    for i, c in cards {
+        if (Abs(w.cards[i].x - c.x) > 6 || Abs(w.cards[i].y - c.y) > 6)
+            return ""
+        names.Push(w.cards[i].name)
+    }
+    return names
+}
+; the match state from the right reader: "play" / "end" / "?" , "" = none or old
+WatchedMatch() {
+    if !STATE.HasOwnProp("wMatch") || A_TickCount - STATE.wMatch.at > 2500
+        return ""
+    return STATE.wMatch.st
 }
 WatchYenMsg(wParam, lParam, msg, hwnd) {
     STATE.wYen := wParam, STATE.wAt := A_TickCount
@@ -2535,6 +2617,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             for v in MT.units
                 n += (v.slot = slot) ? 1 : 0
             MT.units.Push({slot: slot, n: n, x: c.x, y: c.y, lvl: 0, maxed: false, style: style, pt: pt0})
+            MT.ovMoveAt := A_TickCount             ; a new card: the list changed
             MT.good.Push({x: c.x, y: c.y})
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
                 MT.lastGroup := {x: c.x, y: c.y}
@@ -2572,6 +2655,7 @@ OverviewOpen() {
         return r
     Focus()
     MT.ovOk := false                               ; just opened: where the list stands is unknown
+    MT.ovMoveAt := A_TickCount
     Key("f")
     Wait(700)
     r := OverviewRead()
@@ -2791,6 +2875,7 @@ OverviewScroll(dir) {
             return true                            ; already at the top - no wheel at all
         }
         before := b[b.Length].y, prev := b
+        MT.ovMoveAt := A_TickCount
         Click dir
         Wait(160)
         Snap()
@@ -2874,6 +2959,9 @@ ZoomOutKeys(n := 15) {
 ; belongs to which hotbar slot when the slot has a name in settings
 ; (Name1..Name6). One OCR of the panel, kept for 3 s.
 CardNames(cards) {
+    wn := WatchedCards(cards)                      ; the right reader already read them
+    if IsObject(wn)
+        return wn
     if (MT.HasOwnProp("ncAt") && A_TickCount - MT.ncAt < 3000 && MT.ncN = cards.Length
         && cards.Length && MT.ncY = cards[1].y)
         return MT.ncNames
@@ -3232,10 +3320,18 @@ NameCards(r) {
 ; the big title of a card's unit panel (left)
 PanelTitle(c) {
     CloseUnitPanel()
+    MT.panelClick := A_TickCount
     ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
     t := ""
+    if WaitPanelData(900) {                        ; the left reader saw it
+        wp := WatchedPanel()
+        if (IsObject(wp) && wp.name != "") {
+            CloseUnitPanel()
+            return wp.name
+        }
+    }
     Loop 2 {
-        Wait(A_Index = 1 ? 500 : 400)
+        Wait(A_Index = 1 ? 100 : 400)              ; (already waited for the panel above)
         r := OcrRef(20, 315, 300, 415, 2, "l", "c")          ; title only
         t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
         if (t != "")
@@ -3706,6 +3802,9 @@ UpgradeOnce(u) {
 
 ; read the open unit panel -> {name, lvl, max, cost, bx, by} or ""
 PanelInfo() {
+    wp := WatchedPanel()                           ; the left reader already read it
+    if IsObject(wp)
+        return wp
     r := OcrRef(0, 300, 600, 720, 2, "l", "c")
     if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
@@ -3733,8 +3832,9 @@ PanelOf(u, c) {
     Snap()
     if !(MT.HasOwnProp("panelFor") && MT.panelFor = u && UnitPanelVisible()) {
         CloseUnitPanel()
+        MT.panelClick := A_TickCount
         ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
-        Wait(450)
+        WaitPanelData(800)                         ; the left reader, or our own read below
     }
     MT.panelFor := u
     p := PanelInfo()
@@ -3789,8 +3889,9 @@ UpgradeByPanel(u) {
     u.needYen := 0
     if !p.by
         return "poor"                              ; no Upgrade button seen
+    MT.panelClick := A_TickCount
     ClickAt(p.bx, p.by)
-    Wait(400)
+    WaitPanelData(700)
     p2 := PanelInfo()
     if (IsObject(p2) && (p2.max || (p.lvl >= 0 && p2.lvl > p.lvl))) {
         u.lvl := p2.max ? Max(u.lvl + 1, p2.lvl) : p2.lvl, u.bad := 0
