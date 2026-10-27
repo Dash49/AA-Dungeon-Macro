@@ -575,7 +575,11 @@ Start() {
             ; the finished match is still behind the end screens ("Wave 15")
             w := ReadWave()
             if (w >= 1 && w <= 2) || (w >= 3 && w <= 12 && RS.endAt = RS.startAt)
-                RS.ready := true                   ; really a new match (or started mid-match)
+                || (w <= 0 && RS.endAt = RS.startAt && A_TickCount - RS.startAt > 8000) {
+                RS.ready := true                   ; really a new match (or started mid-match /
+                if (w <= 0)                        ; F2 pressed during a match, wave not readable)
+                    Out("started during a match (wave not readable) - playing it")
+            }
             else {
                 ; a reward popup whose text was not read looks like this too -
                 ; click empty space now and then to get past it
