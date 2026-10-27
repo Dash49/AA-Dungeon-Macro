@@ -401,7 +401,7 @@ ReadYen() {
 }
 
 ReadYenOnce() {
-    r := OcrRef(860, 926, 1060, 964, 3, "c", "b")   ; just the yen line, not the hotbar
+    r := OcrRef(850, 920, 1070, 971, 3, "c", "b")   ; just the yen line, not the hotbar
     if !IsObject(r)
         return -1
     best := ""
@@ -497,7 +497,7 @@ DebugSee() {
     if !FindRoblox()
         return Out("[F5] Roblox not found")
     s := Screen(&r)
-    yr := OcrRef(860, 926, 1060, 964, 3, "c", "b")
+    yr := OcrRef(850, 920, 1070, 971, 3, "c", "b")
     Out("[F5] yen text: '" (IsObject(yr) ? yr.t : "?") "'")
     Out("[F5] client " WIN.w "x" WIN.h " at " WIN.x "," WIN.y " scale " Round(WIN.u, 3) "  screen=" s "  yen=" ReadYen() "  wave=" ReadWave())
     Out("[F5] text: " SubStr(RegExReplace(IsObject(r) ? r.t : "", "\s+", " "), 1, 400))
@@ -4179,6 +4179,11 @@ PanelBuy(u, p, nm) {
         u.needYen := p.cost
         Status("saving yen for unit " u.slot " (" nm "): " y "/" p.cost)
         return "poor"
+    }
+    if (y < 0 && p.cost > 0) {                     ; yen not readable: click at most every 5 s
+        if (u.HasOwnProp("blindAt") && A_TickCount - u.blindAt < 5000)
+            return "poor"                          ; (no "Not enough money" spam)
+        u.blindAt := A_TickCount
     }
     u.needYen := 0
     if !p.by {                                     ; no Upgrade button seen

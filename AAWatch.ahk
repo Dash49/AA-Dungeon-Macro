@@ -343,7 +343,7 @@ Words(r) {
     return res_
 }
 ReadYenOnce() {
-    r := OcrRef(860, 926, 1060, 964, 3, "c", "b")   ; just the yen line, not the hotbar
+    r := OcrRef(850, 920, 1070, 971, 3, "c", "b")   ; just the yen line, not the hotbar
     if !IsObject(r)
         return -1
     best := ""
