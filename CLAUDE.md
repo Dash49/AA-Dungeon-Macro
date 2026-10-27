@@ -41,6 +41,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   red path gone **and** a new card in Unit Overview (`ScanCards`, cyan "First" buttons) –
   or, in "wide" mode with the overview closed, the yen dropped. After 3 failed card checks
   for a slot it trusts the red path (`MT.fake`).
+  After every missed click `CapSeen()` OCRs the middle for "Cannot place more than N of this unit!": `CapHit()` marks the slot
+  `MT.capped` (no more placing it, `CheckPlaced`/`CatchPlace` skip it) and adds back units the card count missed (up to N).
   Hill units with no green on screen walk W/D/S/A (`HillWalk` s) and always walk back.
 - Card census (named slots, `CardOf()` → `CardByIdx()`): every card gets a number in the WHOLE list
   (`CardIdx`, scroll offset `MT.ovOff` measured in `OverviewScroll` via `ListShift`, reset to 0 at the top)

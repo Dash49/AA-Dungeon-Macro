@@ -2452,6 +2452,30 @@ GroupAnchor(slot) {
     return MT.HasOwnProp("lastGroup") ? MT.lastGroup : ""
 }
 
+; "Cannot place more than N of this unit!" (red, middle of the screen) -> N, 0 = not shown
+CapSeen() {
+    r := OcrRef(300, 560, 1620, 900, 1)
+    if (IsObject(r) && RegExMatch(r.t, "i)Can+o?t\s*p\w*\s*more\s*th\w*\s*(\d+)", &m))
+        return Integer(m[1])
+    if (IsObject(r) && RegExMatch(r.t, "i)place\s*more\s*than"))
+        return -1                                  ; the number not readable
+    return 0
+}
+; the game says this unit is at its limit: all of them stand on the map.
+; No more placing it this match; units the card count missed count again.
+CapHit(slot, n) {
+    MT.capped[slot] := true
+    mine := 0
+    for v in MT.units
+        mine += (v.slot = slot)
+    Out("  unit " slot ": the game says 'Cannot place more than " (n > 0 ? n : "?") "' - all placed, no more placing it"
+        . (n > mine ? " (the macro had " mine ", now " n ")" : ""))
+    while (n > mine) {
+        mine++
+        MT.units.Push({slot: slot, n: mine, x: -999, y: -999, lvl: 0, maxed: false, style: "random", pt: ""})
+    }
+    MT.placeGen := (MT.HasOwnProp("placeGen") ? MT.placeGen : 0) + 1
+}
 PlaceUnit(slot, style := "random", pt0 := "") {
     Focus()
     ; Unit Overview stays open on the right: its cards prove a placement
@@ -2525,10 +2549,9 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                 . Format("{:06X}", c) ")")
             Shot("nopath")                          ; picture of the held unit's path colour, for fixing
         }
-        t := OcrRef(300, 520, 1620, 900, 1)
-        if (IsObject(t) && RegExMatch(t.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
-            Out("  unit " slot ": the game allows only " m[1])
-            MT.capped[slot] := true
+        if (cap := CapSeen()) {
+            CapHit(slot, cap)
+            Key("q")
             return "cap"
         }
         Key("q")
@@ -2621,12 +2644,10 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                         break
                 }
                 if (got >= 0 && got <= base) {
-                capT := OcrRef(300, 520, 1620, 900, 1)
-                if (IsObject(capT) && RegExMatch(capT.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
-                    Out("  unit " slot ": the game allows only " m[1])
-                    MT.capped[slot] := true
-                    return "cap"
-                }
+                    if (cap := CapSeen()) {
+                        CapHit(slot, cap)
+                        return "cap"
+                    }
                     MT.fake[slot] := MT.fake.Get(slot, 0) + 1
                     Out("  unit " slot ": not really placed at " Round(c.x) "," Round(c.y) " (cards " got ") - trying again")
                     if (MT.fake[slot] = 3)
@@ -2647,10 +2668,8 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                 if (y1 > yb + 50 && !onUnit)       ; income came in meanwhile: can't tell - trust the path
                     Out("  unit " slot ": yen went up (" yb " -> " y1 ") - trusting the red path")
                 else if (y1 >= 0 && y1 > yb - drop) {
-                    capT := OcrRef(300, 520, 1620, 900, 1)
-                    if (IsObject(capT) && RegExMatch(capT.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
-                        Out("  unit " slot ": the game allows only " m[1])
-                        MT.capped[slot] := true
+                    if (cap := CapSeen()) {
+                        CapHit(slot, cap)
                         return "cap"
                     }
                     Out("  unit " slot ": not really placed at " Round(c.x) "," Round(c.y) " (yen " yb " -> " y1 ") - trying again")
@@ -2675,14 +2694,11 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             return "ok"
         }
         MT.bad.Push(c)
-        if (Mod(++fails, 6) = 0) {
-            t := OcrRef(300, 520, 1620, 900, 1)
-            if (IsObject(t) && RegExMatch(t.t, "i)Cannot\s*place\s*more\s*than\s*(\d+)", &m)) {
-                Out("  unit " slot ": the game allows only " m[1])
-                MT.capped[slot] := true
-                Key("q")
-                return "cap"
-            }
+        fails++
+        if (cap := CapSeen()) {                    ; after every missed click: the game's limit?
+            CapHit(slot, cap)
+            Key("q")
+            return "cap"
         }
     }
     Key("q")                                        ; drop the unit from hand
@@ -3599,7 +3615,7 @@ CheckPlaced() {
     again := []
     Loop 6 {
         sl := A_Index
-        if (SlotName(sl) = "")
+        if (SlotName(sl) = "" || MT.capped.Has(sl))  ; capped: the game said all are there
             continue
         mine := []
         for v in MT.units
