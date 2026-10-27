@@ -3988,6 +3988,17 @@ LvlNum(s) {
     s := StrReplace(s, "l", "1", false)
     return IsDigit(s) ? Integer(s) : -1
 }
+; the level box "Upgrade [n]" (top right of the panel) read alone at 3x -> n or -1
+PanelLevel() {
+    r := OcrRef(280, 350, 445, 400, 3, "l", "c")
+    if !IsObject(r)
+        return -1
+    if RegExMatch(r.t, "i)[\[(\{|]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]?", &m)
+        return LvlNum(m[1])
+    if RegExMatch(r.t, "i)grade\D{0,3}(\d{1,2})\b", &m)
+        return Integer(m[1])
+    return -1
+}
 PanelInfo() {
     wp := WatchedPanel()                           ; the left reader already read it
     if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "")
@@ -4002,8 +4013,10 @@ PanelInfo() {
     if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") > 0
-    if RegExMatch(t, "i)Upgrade\s*:\s*([\d][\d,. ]*)", &m)
+    if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; "Upgrade: 8500" ("Upgrade:] 8500")
         p.cost := Integer(RegExReplace(m[1], "\D"))
+    if (p.lvl < 0 && !p.max)
+        p.lvl := PanelLevel()                      ; the small "Upgrade [n]" box alone, bigger
     best := ""
     for w in Words(r)                              ; the big button = the lowest "Upgrade" word
         if (RegExMatch(w.t, "i)^upgrade") && (!IsObject(best) || w.y > best.y))
@@ -4092,12 +4105,18 @@ PanelBuy(u, p, nm) {
             u.maxed := true
         return "ok"
     }
-    if (p.lvl < 0) {                               ; level not readable: give up after a while
+    ; level not readable: the price on the button changed = it went up one level
+    if (IsObject(p2) && p.lvl < 0 && p.cost > 0 && p2.cost > 0 && p2.cost != p.cost) {
+        u.lvl := (p2.lvl >= 0) ? p2.lvl : Max(u.lvl, 0) + 1, u.bad := 0
+        Out("  unit " u.slot " #" u.n ": price " p.cost " -> " p2.cost " = one level up (level box not readable)")
+        return "ok"
+    }
+    if (p.lvl < 0) {                               ; level not readable and nothing changed
         u.bad := (u.HasOwnProp("bad") ? u.bad : 0) + 1
         if (u.bad = 1)
             Out("  [check] unit " u.slot " #" u.n ": level not readable in the panel: " (p.HasOwnProp("raw") ? p.raw : "?"))
-        if (u.bad >= 6) {
-            Out("  unit " u.slot " #" u.n ": its level can't be read - skipping it")
+        if (u.bad >= 8) {                          ; 8 clicks, no price change: really stuck
+            Out("  unit " u.slot " #" u.n ": its level can't be read and the price does not change - skipping it")
             u.maxed := true
         }
     }

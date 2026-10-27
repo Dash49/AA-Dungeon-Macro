@@ -95,7 +95,7 @@ PanelRead() {
     if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") ? 1 : 0
-    if RegExMatch(t, "i)Upgrade\s*:\s*([\d][\d,. ]*)", &m)
+    if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; same as the macro
         p.cost := Integer(RegExReplace(m[1], "\D"))
     best := ""
     for w in Words(r)                              ; the big button = the lowest "Upgrade" word
