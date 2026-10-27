@@ -2629,6 +2629,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             for v in MT.units
                 n += (v.slot = slot) ? 1 : 0
             MT.units.Push({slot: slot, n: n, x: c.x, y: c.y, lvl: 0, maxed: false, style: style, pt: pt0})
+            MT.placeGen := (MT.HasOwnProp("placeGen") ? MT.placeGen : 0) + 1
             MT.ovMoveAt := A_TickCount             ; a new card: the list changed
             MT.good.Push({x: c.x, y: c.y})
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
@@ -3292,7 +3293,8 @@ OvSync(&r) {
     return false
 }
 SlotName(sl) => (MT.HasOwnProp("fusedSlot") && MT.fusedSlot = sl) ? MT.fusedName : Trim(CFG.Get("Name" sl, ""))
-CensusGen() => MT.units.Length "|" (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0)
+; unit count + fusions + placements (a unit placed again: same count, but a new list)
+CensusGen() => MT.units.Length "|" (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0) "|" (MT.HasOwnProp("placeGen") ? MT.placeGen : 0)
 ; the unit of a card text, also the fused unit
 CardSlotF(text) {
     if (MT.HasOwnProp("fusedSlot") && NameScore(text, MT.fusedName) >= 0.8)
