@@ -3815,6 +3815,12 @@ UpgradeOnce(u) {
 }
 
 ; read the open unit panel -> {name, lvl, max, cost, bx, by} or ""
+; "Upgrade [n]" as OCR reads it: O=0, I/l=1, A=4, S=5 (-1 = not a number)
+LvlNum(s) {
+    s := StrReplace(StrReplace(StrReplace(StrReplace(s, "O", "0", false), "S", "5", false), "A", "4", false), "I", "1", false)
+    s := StrReplace(s, "l", "1", false)
+    return IsDigit(s) ? Integer(s) : -1
+}
 PanelInfo() {
     wp := WatchedPanel()                           ; the left reader already read it
     if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "")
@@ -3823,11 +3829,11 @@ PanelInfo() {
     if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
     t := RegExReplace(r.t, "\s+", " ")
-    p := {name: "", lvl: -1, max: false, cost: -1, bx: 0, by: 0}
+    p := {name: "", lvl: -1, max: false, cost: -1, bx: 0, by: 0, raw: SubStr(t, 1, 120)}
     tr := OcrRef(20, 315, 290, 410, 2, "l", "c")             ; the big title
     p.name := IsObject(tr) ? Trim(RegExReplace(tr.t, "\s+", " ")) : ""
-    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OoIl]{1,2})\s*[\])\}|l1]", &m)
-        p.lvl := Integer(RegExReplace(RegExReplace(m[1], "[Oo]", "0"), "[Il]", "1"))
+    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
+        p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") > 0
     if RegExMatch(t, "i)Upgrade\s*:\s*([\d][\d,. ]*)", &m)
         p.cost := Integer(RegExReplace(m[1], "\D"))
@@ -3916,6 +3922,8 @@ UpgradeByPanel(u) {
     }
     if (p.lvl < 0) {                               ; level not readable: give up after a while
         u.bad := (u.HasOwnProp("bad") ? u.bad : 0) + 1
+        if (u.bad = 1)
+            Out("  [check] unit " u.slot " #" u.n ": level not readable in the panel: " (p.HasOwnProp("raw") ? p.raw : "?"))
         if (u.bad >= 6) {
             Out("  unit " u.slot " #" u.n ": its level can't be read - skipping it")
             u.maxed := true

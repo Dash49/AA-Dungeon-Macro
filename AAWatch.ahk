@@ -77,6 +77,12 @@ WatchLeft() {
     }
     busy := false
 }
+; "Upgrade [n]" as OCR reads it: O=0, I/l=1, A=4, S=5 (-1 = not a number) - same as the macro
+LvlNum(s) {
+    s := StrReplace(StrReplace(StrReplace(StrReplace(s, "O", "0", false), "S", "5", false), "A", "4", false), "I", "1", false)
+    s := StrReplace(s, "l", "1", false)
+    return IsDigit(s) ? Integer(s) : -1
+}
 PanelRead() {
     r := OcrRef(0, 300, 600, 720, 2, "l", "c")
     if !(IsObject(r) && (InStr(r.t, "pgrade") || RegExMatch(r.t, "i)\bMax\b")))
@@ -86,8 +92,8 @@ PanelRead() {
     tr := OcrRef(20, 315, 300, 415, 2, "l", "c")             ; the big title
     p.name := IsObject(tr) ? Trim(RegExReplace(tr.t, "\s+", " ")) : ""
     p.name := StrReplace(StrReplace(p.name, FS), RS_)
-    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OoIl]{1,2})\s*[\])\}|l1]", &m)
-        p.lvl := Integer(RegExReplace(RegExReplace(m[1], "[Oo]", "0"), "[Il]", "1"))
+    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
+        p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") ? 1 : 0
     if RegExMatch(t, "i)Upgrade\s*:\s*([\d][\d,. ]*)", &m)
         p.cost := Integer(RegExReplace(m[1], "\D"))
