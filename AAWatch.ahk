@@ -121,7 +121,7 @@ WatchRight() {
                 t0 := A_TickCount
                 r := OcrRect(WIN.x, WIN.y, WIN.x + WIN.w, WIN.y + WIN.h, 1)
                 tx := IsObject(r) ? r.t : ""
-                st := RegExMatch(tx, "VICTORY|DEFEAT|Victory|Defeat|Waves\s*Completed|Total\s*Time\s*:|Click anywhere|Depth Reached|Disconnected|Open Dungeon")
+                st := RegExMatch(tx, "VICTORY|DEFEAT|Victory|Defeat|Waves\s*Completed|Total\s*Time\s*:|Click anywhere|anywhere to cont|\(x\d+\)\s*(Common|Uncommon|Rare|Epic|Legendary|Mythic|Secret)|Depth Reached|Disconnected|Open Dungeon")
                     ? "end" : RegExMatch(tx, "Wave\s*\d") ? "play" : "?"
                 SendText(4, t0 FS st)
             } else {

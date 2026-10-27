@@ -468,7 +468,8 @@ Screen(&r := "") {
         return "shop"
     if InStr(t, "Enter Dungeon")
         return "intro"
-    if InStr(t, "Click anywhere")
+    if InStr(t, "Click anywhere") || RegExMatch(t, "i)anywhere\s*to\s*cont")
+        || RegExMatch(t, "\(x\d+\)\s*(Common|Uncommon|Rare|Epic|Legendary|Mythic|Secret)")   ; "Money (Dungeon) (x53) Common"
         return "reward"
     if RegExMatch(t, "VICTORY|DEFEAT|Victory|Defeat|Waves\s*Completed|Total\s*Time\s*:")
         return "result"
@@ -1753,6 +1754,19 @@ MatchOver() {
         return false
     last := A_TickCount
     s := Screen()
+    if (s = "reward") {                            ; a reward popup ("Money (Dungeon) (x53)"): close it,
+        Loop 4 {                                   ; then look again - the match may go on
+            ClickAnywhere()
+            Wait(700)
+            s := Screen()
+            if (s != "reward")
+                break
+        }
+        Out("  reward popup closed - screen now: " s)
+        if (s = "ingame" || s = "unknown" || s = "vote")
+            return false
+        s := (s = "reward") ? "result" : s
+    }
     return (s != "ingame" && s != "unknown" && s != "vote")
 }
 
