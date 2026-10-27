@@ -2639,12 +2639,33 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             ; a placed unit opens its panel on the left, with its name: that name
             ; = placed. Another name = the click hit a unit already standing there.
             byPanel := false, pn := "", nm := SlotName(slot)
-            Loop 5 {
+            Loop 7 {
                 if (A_Index > 1)
                     Wait(90, false), Snap()
                 if UnitPanelVisible() {
                     pn := OpenPanelName()
                     break
+                }
+            }
+            if (pn = "" && nm != "") {             ; no panel came up: click the spot - a unit
+                CloseUnitPanel()                   ; standing there opens its panel
+                MT.panelClick := A_TickCount
+                ClickRef(c.x, c.y)
+                Loop 8 {
+                    Wait(90, false), Snap()
+                    if UnitPanelVisible() {
+                        pn := OpenPanelName()
+                        break
+                    }
+                }
+                if (pn = "") {                     ; nothing there: not placed (named units
+                    if (cap := CapSeen()) {        ; count only with their name on the panel)
+                        CapHit(slot, cap)
+                        return "cap"
+                    }
+                    Out("  unit " slot ": no " nm " panel at " Round(c.x) "," Round(c.y) " - not placed, trying again")
+                    MT.bad.Push(c)
+                    return "fail"
                 }
             }
             if (pn != "") {
@@ -3948,6 +3969,7 @@ UpgradeOnce(u) {
             return r
         if (u.spotBad < 3)
             return "poor"                          ; the spot again next time
+        return ReplaceUnit(u)                      ; not where it was placed: place it again
     }
     if (SlotName(u.slot) != "")
         return UpgradeByPanel(u)
@@ -3981,8 +4003,43 @@ SpotPanel(u) {
     u.spotBad := (u.HasOwnProp("spotBad") ? u.spotBad : 0) + 1
     if (u.spotBad = 3)
         Out("  unit " u.slot " #" u.n ": its spot " Round(u.x) "," Round(u.y) " does not open its panel"
-            . (IsObject(p) && p.name != "" ? " (opened " p.name ")" : "") " - using Unit Overview for it")
+            . (IsObject(p) && p.name != "" ? " (opened " p.name ")" : ""))
     return ""
+}
+; the unit's spot opened nothing (3 times): a bit higher (the model stands above
+; its spot)? Else it is not on the map - forget it and place it again, so the
+; plan's count is there. "gone" = the unit list changed, "poor" = found it
+ReplaceUnit(u) {
+    nm := SlotName(u.slot)
+    for dy in [-20, -40] {
+        CloseUnitPanel()
+        MT.panelClick := A_TickCount
+        ClickRef(u.x, u.y + dy)
+        WaitPanelData(700)
+        p := PanelInfo()
+        if (IsObject(p) && p.name != "" && (nm = "" || NameScore(p.name, nm) >= 0.6)) {
+            u.y += dy, u.spotBad := 0, MT.panelFor := u
+            Out("  unit " u.slot " #" u.n ": found " (-dy) " px above its spot - clicking there from now on")
+            return "poor"
+        }
+    }
+    CloseUnitPanel(), MT.panelFor := ""
+    for i, v in MT.units
+        if (v = u) {
+            MT.units.RemoveAt(i)
+            break
+        }
+    MT.placeGen := (MT.HasOwnProp("placeGen") ? MT.placeGen : 0) + 1
+    if MT.capped.Has(u.slot) {                     ; the game said all are there: can't place more
+        Out("  unit " u.slot " #" u.n " (" nm "): not found at its spot, but the game limit was reached - leaving it")
+        return "gone"
+    }
+    Out("  unit " u.slot " #" u.n " (" nm "): not found where it was placed - placing it again")
+    MT.paying := false
+    if WaitYen(CFG["Cost" u.slot], 30000)
+        PlaceAny(u.slot, u.HasOwnProp("style") ? u.style : "random", u.HasOwnProp("pt") ? u.pt : "")
+    MT.paying := true
+    return "gone"
 }
 UpgradeBySpot(u) {
     nm := SlotName(u.slot)
@@ -4275,6 +4332,18 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
             }
             Out("  unit " pick.slot " #" pick.n ": card not found in Unit Overview")
             pick.maxed := true                      ; give up on it
+        } else if (r = "gone") {                   ; placed again: upgrade the new one too
+            us := []
+            for sl in slots
+                for u in MT.units
+                    if (u.slot = sl)
+                        us.Push(u)
+            for u in us
+                if !want.Has(u)
+                    want[u] := (goal = "plus") ? u.lvl + plus : (goal = "max") ? 999 : goal
+            lastOk := A_TickCount
+            if (us.Length = 0)
+                return ""
         } else if (r = "poor") {
             MT.need := (pick.HasOwnProp("needYen") && pick.needYen > 0) ? pick.needYen : 0
             if Preempt()                           ; the yen is there now: upgrade at once
