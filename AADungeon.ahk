@@ -3030,7 +3030,7 @@ OverviewScroll(dir) {
         if (Abs(b[b.Length].y - before) < 3 && dir = "WheelUp"
             && Abs(b[1].y - topY) >= 12 * WIN.u && ignored < 2) {
             ignored++                              ; not at the top, yet it did not move: the list
-            ZoomOutKeys(2)                         ; ignored the wheel (the camera may have zoomed)
+            RestoreZoom()                          ; ignored the wheel (the camera zoomed instead)
             WakeList(b)                            ; click a card picture - that wakes the list
             Snap()
             b := ScanCards()
@@ -3040,7 +3040,7 @@ OverviewScroll(dir) {
         }
         if (Abs(b[b.Length].y - before) < 3) {     ; did not move = end of the list
             if (dir = "WheelUp") {                 ; that notch zoomed the camera in - undo it
-                ZoomOutKeys(2)
+                RestoreZoom()
                 if (Abs(b[1].y - topY) >= 12 * WIN.u) {
                     MT.ovOk := false               ; stuck, but not at the top: position unknown
                     Out("  card list: the wheel does not move it up - list position unknown")
@@ -3111,6 +3111,24 @@ LockZoom(stepsIn) {
     Out("  camera zoom locked at " RS.zoomLock " (hills showed after zooming in)")
 }
 
+; the camera distance exactly as CameraSetup left it (in all the way, then out
+; CamZoom notches): a stray wheel notch on the map must not move the units'
+; screen spots (spot upgrades click them there). The tilt is not touched.
+RestoreZoom() {
+    Focus()
+    MouseMove(Round(PX(960)), Round(PY(540)))      ; over the map, not over a list
+    Sleep 120
+    Loop 30 {
+        Click "WheelUp"
+        Sleep 25
+    }
+    Sleep 150
+    Loop CamZoomNow() {
+        Click "WheelDown"
+        Sleep 40
+    }
+    Sleep 200
+}
 ZoomOutKeys(n := 15) {
     Focus()
     Loop n {
@@ -4053,6 +4071,14 @@ ReplaceUnit(u) {
         }
     }
     CloseUnitPanel(), MT.panelFor := ""
+    if !(MT.HasOwnProp("zoomFixAt") && A_TickCount - MT.zoomFixAt < 60000) {
+        MT.zoomFixAt := A_TickCount                ; first: the camera may have moved - set the
+        Out("  unit " u.slot " #" u.n ": not at its spot - setting the camera zoom again first")
+        RestoreZoom()                              ; zoom again and look once more
+        for v in MT.units
+            v.spotBad := 0
+        return "poor"
+    }
     for i, v in MT.units
         if (v = u) {
             MT.units.RemoveAt(i)
@@ -4399,7 +4425,7 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
 OpenPanel(u) {
     CloseUnitPanel()
     nm := Trim(CFG.Get("Name" u.slot, ""))
-    c := CardOf(u)
+    c := (SpotMode() && u.x >= 0) ? "" : CardOf(u) ; spot mode: no list scrolling (it can zoom the camera)
     if IsObject(c) {
         Loop 2 {
             ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)   ; the picture on the card

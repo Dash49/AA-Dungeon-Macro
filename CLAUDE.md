@@ -61,6 +61,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   (`u.x/u.y`, reference coords; `SpotPanel` checks the name; 3 misses -> `u.spotBad`, Unit Overview for that unit).
   Spot mode skips `CheckPlaced`/card census (placing is checked by the panel). `PanelBuy` = the shared "panel open -> buy" part.
   3 spot misses -> `ReplaceUnit`: click 20/40 px higher; still nothing -> the unit is forgotten and placed again ("gone": `UpgradeSteps` rebuilds its list).
+  Spots need a fixed camera: a stray wheel notch on the map (list ignored the wheel) is undone with `RestoreZoom()` (in 30, out CamZoom),
+  and `ReplaceUnit` restores the zoom once (per 60 s) before deciding a unit is gone. Spot mode never scrolls the list for `auto`.
 - Upgrades of named units go through the unit panel (`UpgradeByPanel`): click the card picture, read the
   big name (must match), `Upgrade [n]`, `(MAX)`, the price on the big button (`PanelInfo`), click it only when
   the yen is enough, check the level went up. Unnamed units use the card button (`UpgradeByCard`).
