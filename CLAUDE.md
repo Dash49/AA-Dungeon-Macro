@@ -41,6 +41,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   red path gone **and** a new card in Unit Overview (`ScanCards`, cyan "First" buttons) –
   or, in "wide" mode with the overview closed, the yen dropped. After 3 failed card checks
   for a slot it trusts the red path (`MT.fake`).
+  A placed unit opens its panel on the left with its name: `OpenPanelName()` right after the red path goes =
+  the slot's name -> placed (`byPanel`, no card/yen check); another name = the click hit a standing unit -> not placed.
   After every missed click `CapSeen()` OCRs the middle for "Cannot place more than N of this unit!": `CapHit()` marks the slot
   `MT.capped` (no more placing it, `CheckPlaced`/`CatchPlace` skip it) and adds back units the card count missed (up to N).
   Hill units with no green on screen walk W/D/S/A (`HillWalk` s) and always walk back.
@@ -54,6 +56,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Old card ↔ slot way: if `Name<slot>` is set, `CardByName()` OCRs the names under the portraits
   (`CardNames`, cached 3 s) and matches them (`NameMatch`, fuzzy). Without a name it guesses from card order
   (slot high→low), which is often wrong – the game does not always sort that way.
+- `UpgradeMode` (settings, default `spot`): `UpgradeOnce` -> `UpgradeBySpot` clicks the unit where it was placed
+  (`u.x/u.y`, reference coords; `SpotPanel` checks the name; 3 misses -> `u.spotBad`, Unit Overview for that unit).
+  Spot mode skips `CheckPlaced`/card census (placing is checked by the panel). `PanelBuy` = the shared "panel open -> buy" part.
 - Upgrades of named units go through the unit panel (`UpgradeByPanel`): click the card picture, read the
   big name (must match), `Upgrade [n]`, `(MAX)`, the price on the big button (`PanelInfo`), click it only when
   the yen is enough, check the level went up. Unnamed units use the card button (`UpgradeByCard`).

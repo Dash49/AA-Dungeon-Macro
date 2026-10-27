@@ -34,7 +34,7 @@ global DEF := Map(
     "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
-    "Speed", 100, "ShopMinPts", 1,
+    "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -163,6 +163,8 @@ global SHOPMODE_DESC := ["ซื้อตามรายการด้านล
     "ซื้อทุกชิ้นในร้านเท่าที่เหรียญพอ ไม่ดูรายการ",
     "ไม่ซื้ออะไรเลยในร้าน (ผ่านไปกด Continue)",
     "ตัวเลขถูกแก้เอง ดูที่ '⚙ ตั้งค่าขั้นสูง'"]
+global UPMODES := ["spot", "overview"]
+global UPMODE_TH := ["กดตัวบนแมพ (จำจุดที่วาง)", "ผ่าน Unit Overview"]
 global SPEED_TH := ["ช้า ปลอดภัย (75%)", "ปกติ (100%)", "เร็ว (130%)", "เร็วมาก (160%)", "สุดๆ (200%)"]
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
@@ -401,7 +403,10 @@ BuildGui() {
     C.run.OnEvent("Click", (*) => MarkDirty())
     G.AddText("x40 y575 w720 cGray", "ด่านที่ต้องวิ่ง/กระโดดก่อนเริ่ม (เช่น Magic Hill, Snowy Town) ตั้งได้ในแท็บ 'ด่าน (เดินก่อนเริ่ม)'")
     C.save := G.AddCheckbox("x40 y330 w700", "เก็บหีบไว้เปิดตอนห้องสุดท้าย (SaveChests)")
-    C.vote := G.AddCheckbox("x40 y362 w700", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
+    C.vote := G.AddCheckbox("x40 y362 w380", "กดโหวต Yes ให้อัตโนมัติ (AutoVote)")
+    G.AddText("x485 y366 w95", "วิธีอัปยูนิต")
+    C.upmode := G.AddDropDownList("x585 y362 w180", UPMODE_TH)
+    C.upmode.OnEvent("Change", (*) => MarkDirty())
     G.AddText("x40 y400 w170", "จบดันเจี้ยนแล้ว")
     C.finish := G.AddDropDownList("x215 y396 w250", ["เริ่มดันเจี้ยนใหม่ (again)", "หยุดมาโคร (stop)"])
     G.AddText("x485 y400 w95", "ความเร็วมาโคร")
@@ -1253,6 +1258,8 @@ LoadSettings() {
             Stages := ParseStages(val)
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
+        else if (k = "UpgradeMode")
+            C.upmode.Value := (StrLower(Trim(val)) = "overview") ? 2 : 1
         else if (k = "Speed") {
             bi := 2, bd := 9999                    ; the closest choice
             for i, sp in SPEEDS
@@ -1296,6 +1303,7 @@ SaveAll(restart) {
         IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         IniWrite(SPEEDS[C.speed.Value ? C.speed.Value : 2], INI, "Settings", "Speed")
+        IniWrite(UPMODES[C.upmode.Value ? C.upmode.Value : 1], INI, "Settings", "UpgradeMode")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)
         for i, ne in C.name

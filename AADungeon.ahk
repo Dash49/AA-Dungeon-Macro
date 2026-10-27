@@ -115,7 +115,7 @@ LoadConfig() {
         "Name1", "", "Name2", "", "Name3", "", "Name4", "", "Name5", "", "Name6", "",
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
-        "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1,
+        "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -2452,6 +2452,17 @@ GroupAnchor(slot) {
     return MT.HasOwnProp("lastGroup") ? MT.lastGroup : ""
 }
 
+; the big name on the open unit panel (left), "" = not readable
+OpenPanelName() {
+    Loop 2 {
+        r := OcrRef(20, 315, 300, 415, 2, "l", "c")
+        t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
+        if (t != "")
+            return t
+        Wait(120, false)
+    }
+    return ""
+}
 ; "Cannot place more than N of this unit!" (red, middle of the screen) -> N, 0 = not shown
 CapSeen() {
     r := OcrRef(300, 560, 1620, 900, 1)
@@ -2611,28 +2622,30 @@ PlaceUnit(slot, style := "random", pt0 := "") {
         for pt in watch
             red += IsRed(Color(PX(pt[1]), PY(pt[2])))
         if (red * 4 < watch.Length) {              ; the path is not red any more
-            onUnit := false                        ; did the click hit a unit already standing
-            if (n0 < 0) {                          ; there? (its panel opens) - then only a
-                Loop 3 {                           ; real yen drop counts as placed
-                    if (A_Index > 1)
-                        Wait(90, false), Snap()
-                    if UnitPanelVisible() {
-                        onUnit := true
-                        break
-                    }
+            ; a placed unit opens its panel on the left, with its name: that name
+            ; = placed. Another name = the click hit a unit already standing there.
+            byPanel := false, pn := "", nm := SlotName(slot)
+            Loop 5 {
+                if (A_Index > 1)
+                    Wait(90, false), Snap()
+                if UnitPanelVisible() {
+                    pn := OpenPanelName()
+                    break
                 }
-                if onUnit {
-                    CloseUnitPanel()
-                    if (yb <= 0) {                 ; no yen to tell: not placed
-                        Out("  unit " slot ": " Round(c.x) "," Round(c.y) " is a unit already there (its panel opened) - trying again")
-                        MT.bad.Push(c)
-                        return "fail"
-                    }
+            }
+            if (pn != "") {
+                CloseUnitPanel(), MT.panelFor := ""
+                if (nm != "" && NameScore(pn, nm) >= 0.6)
+                    byPanel := true
+                else if (nm != "") {
+                    Out("  unit " slot ": " Round(c.x) "," Round(c.y) " opened " pn " (a unit already there) - not placed, trying again")
+                    MT.bad.Push(c)
+                    return "fail"
                 }
             }
             if !MT.HasOwnProp("fake")
                 MT.fake := Map()
-            if (n0 >= 0 && MT.fake.Get(slot, 0) < 3) { ; did a card really appear?
+            if (!byPanel && n0 >= 0 && MT.fake.Get(slot, 0) < 3) { ; did a card really appear?
                 ; the game also drops the unit from the hand when the spot is
                 ; refused or the unit limit is reached - check what happened
                 got := -1
@@ -2656,7 +2669,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     return "fail"
                 }
             }
-            if (n0 < 0 && yb > 0) {                ; no card check: the yen must drop
+            if (!byPanel && n0 < 0 && yb > 0) {    ; no card check: the yen must drop
                 drop := Min(CFG["Cost" slot] * 0.5, 250) ; the price in settings may be off
                 y1 := -1
                 Loop 5 {
@@ -2665,7 +2678,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     if (y1 >= 0 && y1 <= yb - drop)
                         break
                 }
-                if (y1 > yb + 50 && !onUnit)       ; income came in meanwhile: can't tell - trust the path
+                if (y1 > yb + 50)                  ; income came in meanwhile: can't tell - trust the path
                     Out("  unit " slot ": yen went up (" yb " -> " y1 ") - trusting the red path")
                 else if (y1 >= 0 && y1 > yb - drop) {
                     if (cap := CapSeen()) {
@@ -2690,7 +2703,8 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
                 MT.lastGroup := {x: c.x, y: c.y}
             Out("  placed unit " slot " #" n " at " Round(c.x) "," Round(c.y) " (try " fails + 1
-                . (style != "random" ? ", " style : "") ")" (n0 < 0 && IsSet(y1) && yb > 0 ? "  (yen " yb " -> " y1 ")" : ""))
+                . (style != "random" ? ", " style : "") ")" (byPanel ? "  (its panel: " pn ")"
+                : (n0 < 0 && IsSet(y1) && yb > 0) ? "  (yen " yb " -> " y1 ")" : ""))
             return "ok"
         }
         MT.bad.Push(c)
@@ -3741,7 +3755,7 @@ CatchPlace(i, st) {
         if (v.slot = st.slot)
             mine.Push(v)
     have := mine.Length, how := "counted by the macro"
-    if (SlotName(st.slot) != "") {                 ; named: only the real cards count
+    if (SlotName(st.slot) != "" && !SpotMode()) {  ; named: only the real cards count
         if !Census() {
             CatchSay(st, "  saving phase: step " i " (" st.text ") - cards could not be counted yet, trying later")
             return false
@@ -3823,10 +3837,13 @@ CatchUpgrade(i, st, need) {
         if (!u.HasOwnProp("chkAt") || A_TickCount - u.chkAt > 30000) && SlotName(u.slot) != "" {   ; real level (every 30 s)
             if Preempt()
                 return false                       ; back to the current task
-            c := CardOf(u)
-            if IsObject(c) {
+            p := ""
+            if (SpotMode() && u.x >= 0 && !(u.HasOwnProp("spotBad") && u.spotBad >= 3))
+                p := SpotPanel(u)                  ; click it on the map
+            else if IsObject(c := CardOf(u))
                 p := PanelOf(u, c)
-                if (IsObject(p) && (p.name = "" || NameScore(p.name, SlotName(u.slot)) >= 0.6)) {
+            if IsObject(p) {
+                if (p.name = "" || NameScore(p.name, SlotName(u.slot)) >= 0.6) {
                     if (p.lvl >= 0)
                         u.lvl := p.lvl
                     u.maxed := p.max
@@ -3907,9 +3924,61 @@ FuseCheck(u) {
 ; Named units: through the unit panel on the left (big name + level +
 ; price, checked before clicking). Others: the card's own Upg button.
 UpgradeOnce(u) {
+    if (SpotMode() && u.x >= 0 && !(u.HasOwnProp("spotBad") && u.spotBad >= 3)) {
+        r := UpgradeBySpot(u)                      ; click the unit where it stands
+        if (r != "nospot")
+            return r
+        if (u.spotBad < 3)
+            return "poor"                          ; the spot again next time
+    }
     if (SlotName(u.slot) != "")
         return UpgradeByPanel(u)
     return UpgradeByCard(u)
+}
+; UpgradeMode (settings): spot = click the unit on the map (Unit Overview when that fails),
+; overview = always through the Unit Overview cards
+SpotMode() => StrLower(Trim(CFG.Get("UpgradeMode", "spot"))) != "overview"
+; open the panel of unit u by clicking where it was placed -> PanelInfo or ""
+SpotPanel(u) {
+    if !(MT.HasOwnProp("panelFor") && MT.panelFor = u && (Snap(), UnitPanelVisible())) {
+        CloseUnitPanel()
+        if (u.x > 1230 && OverviewRead().open)     ; the spot is under the Unit Overview
+            CloseOverview()
+        MT.panelClick := A_TickCount
+        ClickRef(u.x, u.y)
+        WaitPanelData(800)
+    }
+    MT.panelFor := u
+    p := PanelInfo()
+    if !IsObject(p) {
+        Wait(300)
+        p := PanelInfo()
+    }
+    nm := SlotName(u.slot)
+    if (IsObject(p) && (nm = "" || p.name = "" || NameScore(p.name, nm) >= 0.6)) {
+        u.spotBad := 0
+        return p
+    }
+    CloseUnitPanel(), MT.panelFor := ""
+    u.spotBad := (u.HasOwnProp("spotBad") ? u.spotBad : 0) + 1
+    if (u.spotBad = 3)
+        Out("  unit " u.slot " #" u.n ": its spot " Round(u.x) "," Round(u.y) " does not open its panel"
+            . (IsObject(p) && p.name != "" ? " (opened " p.name ")" : "") " - using Unit Overview for it")
+    return ""
+}
+UpgradeBySpot(u) {
+    nm := SlotName(u.slot)
+    if (u.HasOwnProp("needYen") && u.needYen > 0) {  ; still saving: no need to open anything
+        y := ReadYen()
+        if (y >= 0 && y < u.needYen) {
+            Status("saving yen for unit " u.slot " (" nm "): " y "/" u.needYen)
+            return "poor"
+        }
+    }
+    p := SpotPanel(u)
+    if !IsObject(p)
+        return "nospot"
+    return PanelBuy(u, p, nm)
 }
 
 ; read the open unit panel -> {name, lvl, max, cost, bx, by} or ""
@@ -3991,6 +4060,11 @@ UpgradeByPanel(u) {
         }
         return "retry"
     }
+    MT.panelFor := u
+    return PanelBuy(u, p, nm)
+}
+; the unit's panel is open (p = PanelInfo): MAX? enough yen? click Upgrade, check the level
+PanelBuy(u, p, nm) {
     if p.max {
         u.maxed := true, u.needYen := 0
         Out("  unit " u.slot " #" u.n " (" nm ") is MAX" (p.lvl >= 0 ? " (" p.lvl ")" : ""))
@@ -4078,7 +4152,8 @@ UpgradeTargets(slots, goal, plus, style, untilWave, timeout) {
     return r
 }
 UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
-    CheckPlaced()                                  ; plan vs. cards: place missing ones again
+    if !SpotMode()
+        CheckPlaced()                              ; plan vs. cards: place missing ones again
     us := []
     for s in slots
         for u in MT.units
@@ -4087,6 +4162,8 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
     if (us.Length = 0)
         return ""
     for u in us {                                  ; start from the real levels
+        if (SpotMode() && u.x >= 0)
+            continue                               ; spot mode: the panel tells the level
         c := CardOf(u)
         if IsObject(c) {
             lv := CardLevel(c)
