@@ -3926,6 +3926,10 @@ FuseCheck(u) {
 UpgradeOnce(u) {
     if (SpotMode() && u.x >= 0 && !(u.HasOwnProp("spotBad") && u.spotBad >= 3)) {
         r := UpgradeBySpot(u)                      ; click the unit where it stands
+        if (r = "poor" && u.HasOwnProp("noBtn") && u.noBtn >= 5) {
+            u.spotBad := 3, u.noBtn := 0
+            Out("  unit " u.slot " #" u.n ": no Upgrade button via its spot - using Unit Overview for it")
+        }
         if (r != "nospot")
             return r
         if (u.spotBad < 3)
@@ -4001,8 +4005,8 @@ PanelLevel() {
 }
 PanelInfo() {
     wp := WatchedPanel()                           ; the left reader already read it
-    if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "")
-        return wp                                  ; (level unread there: read it here)
+    if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "" && (wp.by || wp.max))
+        return wp                                  ; (level or button missing there: read it here)
     r := OcrRef(0, 300, 600, 720, 2, "l", "c")
     if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
@@ -4092,8 +4096,14 @@ PanelBuy(u, p, nm) {
         return "poor"
     }
     u.needYen := 0
-    if !p.by
-        return "poor"                              ; no Upgrade button seen
+    if !p.by {                                     ; no Upgrade button seen
+        u.noBtn := (u.HasOwnProp("noBtn") ? u.noBtn : 0) + 1
+        if (u.noBtn = 1 || Mod(u.noBtn, 20) = 0)
+            Out("  [check] unit " u.slot " #" u.n ": no Upgrade button found in its panel (" u.noBtn "x): "
+                . (p.HasOwnProp("raw") ? p.raw : "(reader)"))
+        return "poor"
+    }
+    u.noBtn := 0
     MT.panelClick := A_TickCount
     Spent()
     ClickAt(p.bx, p.by)
@@ -4195,7 +4205,7 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
         want[u] := (goal = "plus") ? u.lvl + plus : (goal = "max") ? 999 : goal
     if (MT.HasOwnProp("curStep") && IsObject(MT.curStep) && MT.curStep.k = "upgrade")
         MT.curStep.want := want                    ; for the saving-phase look back
-    t0 := A_TickCount, lastWave := 0, lastCatch := 0
+    t0 := A_TickCount, lastWave := 0, lastCatch := 0, lastOk := A_TickCount, lastSay := 0
     Loop {
         if MatchOver()
             return "end"
@@ -4226,8 +4236,19 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
         r := UpgradeOnce(pick)
         MT.paying := false
         if (r = "ok") {
-            MT.need := 0
+            MT.need := 0, lastOk := A_TickCount
             Out("  unit " pick.slot " #" pick.n (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
+        } else if (A_TickCount - lastOk > 30000 && A_TickCount - lastSay > 30000) {
+            lastSay := A_TickCount                 ; stuck? say why, for the next report
+            Out("  [check] no upgrade for " (A_TickCount - lastOk) // 1000 " s: unit " pick.slot " #" pick.n
+                . " (" r ")  level " pick.lvl "  price " (pick.HasOwnProp("needYen") ? pick.needYen : "?") "  yen " ReadYen()
+                . "  way " (SpotMode() && pick.x >= 0 && !(pick.HasOwnProp("spotBad") && pick.spotBad >= 3) ? "spot " Round(pick.x) "," Round(pick.y) : "overview"))
+            y := ReadYen(), np := pick.HasOwnProp("needYen") ? pick.needYen : 0
+            if (A_TickCount - lastOk > 55000 && SpotMode() && !(pick.HasOwnProp("spotBad") && pick.spotBad >= 3)
+                && (np <= 0 || y >= np)) {         ; not short of yen, still nothing: try the other way
+                pick.spotBad := 3
+                Out("  unit " pick.slot " #" pick.n ": no progress via its spot - using Unit Overview for it")
+            }
         }
         else if (r = "lost") {
             if FixFirstPerson()                     ; that was the reason - try again
