@@ -166,7 +166,7 @@ global SHOPMODE_DESC := ["ซื้อตามรายการด้านล
 global SPEED_TH := ["ช้า ปลอดภัย (75%)", "ปกติ (100%)", "เร็ว (130%)", "เร็วมาก (160%)", "สุดๆ (200%)"]
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
-global UPDATE_FILES := ["AADungeon.ahk", "AASettings.ahk", "Lib/OCR.ahk"]
+global UPDATE_FILES := ["AADungeon.ahk", "AASettings.ahk", "AAWatch.ahk", "Lib/OCR.ahk"]
 global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ"]
 
 global Steps := []          ; ขั้นตอนของแผน

@@ -25,7 +25,7 @@ jobs:
         run: |
           $exe = (Get-Content ahkpath.txt).Trim()
           $fail = $false
-          foreach ($f in @("AADungeon.ahk", "AASettings.ahk")) {
+          foreach ($f in @("AADungeon.ahk", "AASettings.ahk", "AAWatch.ahk")) {
             $p = Start-Process -FilePath $exe -ArgumentList "/ErrorStdOut", "/Validate", $f -Wait -PassThru -NoNewWindow -RedirectStandardOutput "out.txt" -RedirectStandardError "err.txt"
             $msg = ((Get-Content out.txt -Raw) + (Get-Content err.txt -Raw)) -replace "`r", ""
             if ($p.ExitCode -ne 0) {

@@ -88,6 +88,8 @@ Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode:
 Status("AA Dungeon ready - F2 start")
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 OnError(ErrLog)                                     ; script errors go to the log too
+OnMessage(0x5A01, WatchYenMsg)                      ; the yen from AAWatch.ahk
+OnExit((*) => StopWatchers())
 if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
     Out("Restarted after being stuck - starting again in 5 s")
     SetTimer(Start, -5000)
@@ -384,6 +386,9 @@ RGB(c) => {r: (c >> 16) & 0xFF, g: (c >> 8) & 0xFF, b: c & 0xFF}
 ; the yen counter above the hotbar. Floating "+202" / "-550" texts can
 ; cover it for a moment, so it is read twice and the bigger value wins.
 ReadYen() {
+    w := WatchedYen(300)                           ; fresh from AAWatch.ahk: no OCR here
+    if (w >= 0)
+        return w
     best := -1
     Loop 2 {
         v := ReadYenOnce()
@@ -516,6 +521,7 @@ Start() {
         return
     STATE.run := true
     STATE.hb := A_TickCount
+    StartWatchers()
     ; keep the screen on and the PC awake while the macro runs (a screen
     ; that turns off can lock Windows, and then nothing can be clicked)
     DllCall("SetThreadExecutionState", "uint", 0x80000003)
@@ -1784,6 +1790,34 @@ FirstUnit(slot) {
     return ""
 }
 
+; ---- helper processes (AAWatch.ahk) --------------------------------
+; A 2nd AutoHotkey process reads the yen all the time (it never clicks)
+; and posts it here; ReadYen()/YenNow() use that value while it is fresh.
+StartWatchers() {
+    StopWatchers()
+    f := A_ScriptDir "\AAWatch.ahk"
+    if !FileExist(f)
+        return Out("AAWatch.ahk not found - reading the yen here (slower)")
+    try {
+        Run('"' A_AhkPath '" "' f '" ' A_ScriptHwnd, A_ScriptDir, , &pid)
+        STATE.watchPid := pid
+        Out("yen watcher started (AAWatch.ahk)")
+    }
+}
+StopWatchers() {
+    if (STATE.HasOwnProp("watchPid") && STATE.watchPid)
+        try ProcessClose(STATE.watchPid)
+    STATE.watchPid := 0
+}
+WatchYenMsg(wParam, lParam, msg, hwnd) {
+    STATE.wYen := wParam, STATE.wAt := A_TickCount
+}
+WatchedYen(maxAge) {                               ; the watcher's yen, -2 = none / too old
+    if (STATE.HasOwnProp("wAt") && A_TickCount - STATE.wAt <= maxAge)
+        return STATE.wYen
+    return -2
+}
+
 ; ---- multitasking while saving -------------------------------------
 ; AHK runs one thing at a time, so "multitasking" is cooperative: the
 ; checking work (card count, panel levels, old steps) asks Preempt()
@@ -1791,6 +1825,9 @@ FirstUnit(slot) {
 ; current task (MT.need). The current task then runs at once, and the
 ; checking goes on afterwards from where it stopped.
 YenNow() {                                         ; yen, read at most every 0.25 s
+    w := WatchedYen(500)
+    if (w >= 0)
+        return w
     if (STATE.HasOwnProp("yenAt") && A_TickCount - STATE.yenAt < 250)
         return STATE.yen
     v := ReadYenOnce()

@@ -8,12 +8,13 @@ Users are Thai; talk to them in Thai (issue comments, PR text). Code comments st
 |---|---|
 | `AADungeon.ahk` | the macro (one file, ~2300 lines) |
 | `AASettings.ahk` | Thai settings window (F8) for plan.txt / settings.ini, bug report (F9) |
+| `AAWatch.ahk` | helper process started by the macro (`StartWatchers`): reads the yen every 0.15 s and posts it (msg 0x5A01) to the macro window; never clicks; quits when the macro window is gone. Its screen helpers are copies – keep them in step |
 | `Lib/OCR.ahk` | Descolada's Windows OCR wrapper – third party, do not edit |
 | `plan.example.txt` | example plan; copied to the user's `plan.txt` on first run |
 | `settings.example.ini` | example settings, **UTF-16 LE**; copied to `settings.ini` on first run |
 
 Users' own `settings.ini` / `plan.txt` are not in the repo, so updates (F8 > Update, or a new ZIP) never overwrite them.
-The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `Lib/OCR.ahk`, taken from the newest commit SHA (`LatestRaw`) –
+The updater replaces only `AADungeon.ahk`, `AASettings.ahk`, `AAWatch.ahk`, `Lib/OCR.ahk`, taken from the newest commit SHA (`LatestRaw`) –
 raw `.../main/` is CDN-cached and once overwrote a newer local file with an older one.
 
 `.ahk` files are UTF-8 **with BOM**. Keep the BOM and CRLF-agnostic style; never reformat whole files.
