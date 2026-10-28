@@ -116,6 +116,7 @@ LoadConfig() {
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
+        "StopAfterLosses", 4, "Webhook", "", "WebhookShots", 1,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -605,7 +606,7 @@ Start() {
                 PlayMatch()
                 RS.ready := false, RS.endAt := A_TickCount
             case "result":    DoResult(r)
-            case "reward":    ClickAnywhere()
+            case "reward":    RewardSeen(r), ClickAnywhere()
             case "afterroom": DoAfterRoom(r)
             case "shop":      DoShop()
             case "shrine":    DoShrine()
@@ -615,6 +616,7 @@ Start() {
                 ; Continue does nothing here - close with the red X, then go
                 ; back to the lobby and start a new run from the Dungeon button
                 Out("You Died (all lives lost) - closing, back to lobby")
+                RunSummary("💀 died at depth " RS.depth)
                 RS.depth := 0, RS.bossDone := false, RS.chestsDone := false, RS.died := true
                 ClickRef(1543, 182)
                 Wait(1500)
@@ -775,8 +777,20 @@ DoResult(r) {
     tries := (A_TickCount - lastAt < 8000) ? tries + 1 : 1
     lastAt := A_TickCount
     won := RegExMatch(r.t, "VICTORY|Victory") ? true : false
-    if (tries = 1)
+    if (tries = 1) {
         Out(won ? "VICTORY" : "DEFEAT")
+        STATE.lossRow := won ? 0 : (STATE.HasOwnProp("lossRow") ? STATE.lossRow : 0) + 1
+        lim := CFG.Get("StopAfterLosses", 4) + 0
+        Hook((won ? "✅ VICTORY" : "❌ DEFEAT") (RS.depth ? "  · depth " RS.depth : "")
+            . (RS.HasOwnProp("mapName") && RS.mapName != "" ? "  · " RS.mapName : "")
+            . (!won && lim > 0 ? "  (" STATE.lossRow "/" lim " in a row)" : ""))
+        if (!won && lim > 0 && STATE.lossRow >= lim) {
+            Out("lost " STATE.lossRow " rooms in a row - stopping the macro (StopAfterLosses=" lim ")")
+            Hook("🛑 lost " STATE.lossRow " rooms in a row - the macro stopped. Check the plan / units, then press F2.", HookShot())
+            Sleep 3000                             ; (let the message go out)
+            Reload()                               ; = F3: stopped, waiting for F2
+        }
+    }
     if (won && RS.depth >= RS.maxDepth)
         RS.bossDone := true
     if (tries >= 2) {
@@ -1156,7 +1170,7 @@ LoadingMap(r) {
             if RegExMatch(name, "i)^(Dungeon|Depth|Easy|Normal|Hard|Insane|Nightmare|Travel)")
                 continue                           ; not the map name - the next line
             if (name != last && RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$")) {
-                last := name
+                last := name, RS.mapName := name
                 Out("  map: " name)
                 MapSeen(name)
             }
@@ -1531,8 +1545,10 @@ DoChests() {
                 got := false
                 Loop 8 {
                     Wait(350)
-                    if InStr(AllText(), "Click anywhere") {
+                    rc := OcrAll()
+                    if (IsObject(rc) && InStr(rc.t, "Click anywhere")) {
                         got := true
+                        RewardSeen(rc)             ; what the chest gave (Discord)
                         break
                     }
                 }
@@ -1569,6 +1585,7 @@ DoLeave(r) {
         return
     }
     Out("Run finished -> Finish")
+    RunSummary("run finished (depth " RS.depth ")")
     if Find(r, "Finish", &x, &y)
         ClickAt(x, y)
     else
@@ -1580,6 +1597,98 @@ DoLeave(r) {
         Out("OnFinish=stop")
         Reload()
     }
+}
+
+; ============================================================= Discord
+; settings: Webhook = a Discord webhook URL (channel > Integrations > Webhooks),
+; WebhookShots = 1: a picture with every reward. Sent by curl.exe (part of
+; Windows 10/11) in the background, so the macro never waits for Discord.
+JsonStr(str) {
+    str := StrReplace(str, "\", "\\"), str := StrReplace(str, '"', '\"')
+    str := StrReplace(str, "`r", ""), str := StrReplace(str, "`n", "\n"), str := StrReplace(str, "`t", " ")
+    return '"' str '"'
+}
+Hook(msg, img := "") {
+    static seq := 0
+    url := Trim(CFG.Get("Webhook", ""))
+    if !RegExMatch(url, "i)^https://([\w-]+\.)?discord(app)?\.com/api/webhooks/")
+        return
+    try {
+        seq := Mod(seq + 1, 30)
+        dir := A_Temp "\aad_hook"
+        DirCreate(dir)
+        js := dir "\m" seq ".json"
+        try FileDelete(js)
+        FileAppend('{"username":"AA Dungeon Macro","content":' JsonStr(SubStr(msg, 1, 1900)) '}', js, "UTF-8-RAW")
+        if (img != "" && FileExist(img))
+            cmd := 'curl.exe -s -m 30 -F "payload_json=<' js '" -F "file1=@' img '" "' url '"'
+        else
+            cmd := 'curl.exe -s -m 30 -H "Content-Type: application/json" --data-binary "@' js '" "' url '"'
+        Run(cmd, , "Hide")
+    } catch as e {
+        Out("  discord: could not send (" e.Message ")")
+    }
+}
+; a picture of the game for Discord (20 kept, used in turn) - "" when pictures are off
+HookShot() {
+    static seq := 0
+    if !(CFG.Get("WebhookShots", 1) + 0) || Trim(CFG.Get("Webhook", "")) = ""
+        return ""
+    f := Shot("hook", "hook")
+    if !(f && FileExist(f))
+        return ""
+    seq := Mod(seq + 1, 20)
+    nf := A_ScriptDir "\shots\hook\last" seq ".jpg"
+    try FileMove(f, nf, 1)
+    return FileExist(nf) ? nf : f
+}
+; a reward popup: "Money (Dungeon) (x53)" + "Common", or a unit name + its rarity.
+; Noted once (the same popup is seen several times), counted for this run and
+; this session, sent to Discord with a picture.
+RewardSeen(r) {
+    static lastK := "", lastAt := 0
+    if !IsObject(r)
+        return
+    item := "", cnt := 1, rar := "", prevT := ""
+    for ln in Lines(r) {
+        tx := Trim(RegExReplace(ln.t, "\s+", " "))
+        if (item = "" && RegExMatch(tx, "^(.*?)\s*\(\s*[xX]\s*(\d[\d,]*)\s*\)", &m) && Trim(m[1]) != "")
+            item := Trim(m[1]), cnt := Integer(StrReplace(m[2], ","))
+        else if RegExMatch(tx, "i)^(Common|Uncommon|Rare|Epic|Legendary|Mythic|Secret|Exclusive|Celestial)$", &m2) {
+            rar := m2[1]
+            if (item = "" && prevT != "" && !InStr(prevT, "Click"))
+                item := prevT
+        }
+        prevT := tx
+    }
+    if (item = "")
+        return
+    rk := item "|" cnt
+    if (rk = lastK && A_TickCount - lastAt < 8000)
+        return
+    lastK := rk, lastAt := A_TickCount
+    for tal in [STATE, RS] {
+        if !tal.HasOwnProp("loot")
+            tal.loot := Map()
+        tal.loot[item] := tal.loot.Get(item, 0) + cnt
+    }
+    Out("  reward: " item " x" cnt (rar != "" ? " (" rar ")" : ""))
+    Hook("🎁 **" item "** x" cnt (rar != "" ? "  (" rar ")" : "") (RS.depth ? "  · depth " RS.depth : ""), HookShot())
+}
+; what this run gave (Discord), then start counting again
+RunSummary(why) {
+    txt := ""
+    if RS.HasOwnProp("loot")
+        for it, c in RS.loot
+            txt .= "`n• " it " x" c
+    if (RS.coins >= 0)
+        txt .= "`n• dungeon coins now: " RS.coins
+    all := ""
+    if STATE.HasOwnProp("loot")
+        for it, c in STATE.loot
+            all .= (all = "" ? "" : ", ") it " x" c
+    Hook("🏁 " why (txt != "" ? "`n**This run:**" txt : "") (all != "" ? "`n**Since F2:** " all : ""))
+    RS.loot := Map()
 }
 
 ; ================================================================ plan
@@ -1763,6 +1872,8 @@ MatchOver() {
     last := A_TickCount
     s := Screen()
     if (s = "reward") {                            ; a reward popup ("Money (Dungeon) (x53)"): close it,
+        s := Screen(&rw)                           ; (note what it gave first)
+        RewardSeen(rw)
         Loop 4 {                                   ; then look again - the match may go on
             ClickAnywhere()
             Wait(700)

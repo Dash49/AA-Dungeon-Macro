@@ -35,6 +35,7 @@ global DEF := Map(
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
+    "StopAfterLosses", 4, "Webhook", "", "WebhookShots", 1,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -198,7 +199,7 @@ BuildGui() {
     G := Gui("+MinSize800x720", "AA Dungeon - ตั้งค่ามาโคร")
     G.SetFont("s10", "Leelawadee UI")
     G.OnEvent("Close", OnClose)
-    tab := G.AddTab3("x10 y10 w780 h625", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป", "ด่าน (เดินก่อนเริ่ม)"])
+    tab := G.AddTab3("x10 y10 w780 h625", ["แผนวางยูนิต", "เลือกห้อง", "ร้านค้า", "ยูนิต / ทั่วไป", "ด่าน (เดินก่อนเริ่ม)", "Discord / หยุดเอง"])
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
@@ -442,6 +443,21 @@ BuildGui() {
     G.AddButton("x570 y395 w205", "รีเฟรชรายการที่เห็น").OnEvent("Click", (*) => LoadMapsSeen())
     G.AddText("x570 y435 w205 cGray", "W = เดินหน้า  S = ถอยหลัง`nA = ซ้าย  D = ขวา`n(ตามมุมกล้องตอนเริ่มด่าน)`n`nกด 'บันทึก' ด้านล่างเมื่อแก้เสร็จ")
 
+    ; ------------------------------------- แท็บ 6: Discord / หยุดเอง
+    tab.UseTab(6)
+    G.AddGroupBox("x25 y45 w750 h250", "แจ้งเตือนเข้า Discord (Webhook)")
+    G.AddText("x40 y75 w720 cGray", "ส่งเข้าห้อง Discord ทุกครั้งที่ได้ของ (หีบ, เหรียญ, Trait/Stat Reroll, เพชร, Cursed Token, ยูนิต ฯลฯ) + ผลแต่ละห้อง (ชนะ/แพ้) + สรุปของทั้งรอบ")
+    G.AddText("x40 y110 w150", "Webhook URL")
+    C.hook := G.AddEdit("x195 y106 w570")
+    C.hook.OnEvent("Change", (*) => MarkDirty())
+    C.hookShot := G.AddCheckbox("x40 y145 w720", "แนบรูปหน้าจอไปด้วยทุกครั้งที่ได้ของ (WebhookShots)")
+    C.hookShot.OnEvent("Click", (*) => MarkDirty())
+    G.AddButton("x40 y180 w200 h30", "ส่งข้อความทดสอบ").OnEvent("Click", (*) => HookTest())
+    G.AddText("x40 y222 w720 cGray", "วิธีเอา URL: ห้อง Discord > ตั้งค่าห้อง (เฟือง) > Integrations > Webhooks > New Webhook > Copy Webhook URL`nปล่อยว่าง = ไม่ส่ง   ต้องมี curl.exe (มีใน Windows 10/11 อยู่แล้ว)")
+    G.AddGroupBox("x25 y310 w750 h110", "หยุดมาโครเอง")
+    AddNum("StopAfterLosses", "แพ้ติดกันกี่ห้องแล้วหยุด", 40, 345, "ห้อง  (0 = ไม่หยุด, ค่าเริ่มต้น 4)  หยุดแล้วส่งแจ้งเข้า Discord ด้วย", 420)
+    G.AddText("x40 y385 w720 cGray", "หยุด = เหมือนกด F3 (มาโครรออยู่ กด F2 เพื่อเริ่มใหม่)  ชนะ 1 ห้องนับใหม่จาก 0")
+
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
     G.AddButton("x10 y645 w120 h35", "บันทึก").OnEvent("Click", (*) => SaveAll(false))
@@ -462,6 +478,23 @@ AddNum(key, label, x, y, tip := "", tipW := 100) {
     return ctls
 }
 
+; a test message to the webhook in the box (curl.exe, comes with Windows 10/11)
+HookTest() {
+    url := Trim(C.hook.Value)
+    if !RegExMatch(url, "i)^https://([\w-]+\.)?discord(app)?\.com/api/webhooks/") {
+        MsgBox("ใส่ Webhook URL ของ Discord ก่อน (ขึ้นต้นด้วย https://discord.com/api/webhooks/...)", "AA Dungeon", "Icon!")
+        return
+    }
+    js := A_Temp "\aad_hooktest.json"
+    try FileDelete(js)
+    FileAppend('{"username":"AA Dungeon Macro","content":"✅ ทดสอบจากมาโคร AA Dungeon - เชื่อม Discord สำเร็จ"}', js, "UTF-8-RAW")
+    try {
+        RunWait(A_ComSpec ' /c curl.exe -s -m 20 -o NUL -w "%{http_code}" -H "Content-Type: application/json" --data-binary "@' js '" "' url '" > "' A_Temp '\aad_hooktest.txt"', , "Hide")
+    }
+    res := ""
+    try res := Trim(FileRead(A_Temp "\aad_hooktest.txt"))
+    MsgBox((res = "204" || res = "200") ? "ส่งสำเร็จ ดูในห้อง Discord ได้เลย" : "ส่งไม่สำเร็จ (" res ")  เช็ค URL / อินเทอร์เน็ต", "AA Dungeon")
+}
 MarkDirty() {
     global Dirty
     if !Filling
@@ -1258,6 +1291,10 @@ LoadSettings() {
             Stages := ParseStages(val)
         else if (k = "OnFinish")
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
+        else if (k = "Webhook")
+            C.hook.Value := val
+        else if (k = "WebhookShots")
+            C.hookShot.Value := (val + 0) ? 1 : 0
         else if (k = "UpgradeMode")
             C.upmode.Value := (StrLower(Trim(val)) = "overview") ? 2 : 1
         else if (k = "Speed") {
@@ -1304,6 +1341,8 @@ SaveAll(restart) {
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         IniWrite(SPEEDS[C.speed.Value ? C.speed.Value : 2], INI, "Settings", "Speed")
         IniWrite(UPMODES[C.upmode.Value ? C.upmode.Value : 1], INI, "Settings", "UpgradeMode")
+        IniWrite(Trim(C.hook.Value), INI, "Settings", "Webhook")
+        IniWrite(C.hookShot.Value ? 1 : 0, INI, "Settings", "WebhookShots")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)
         for i, ne in C.name
