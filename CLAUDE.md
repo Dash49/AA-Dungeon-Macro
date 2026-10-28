@@ -85,9 +85,11 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Coordinates: everything is written in a 1920x1080 reference. `PX(x, anchor)` / `PY(y, anchor)`
   convert to the real client (anchors l/c/r and t/c/b; scale `WIN.u` = client height / 1080).
   `Snap()` copies the client into a buffer; `Color(x, y)` reads it (screen coords).
-- Discord (`Webhook`, `WebhookShots`): `Hook(msg, img)` writes the JSON to `%TEMP%\aad_hook` and runs curl.exe hidden (never waits).
-  `RewardSeen(r)` reads a reward popup ("Name (xN)" line or the line above a rarity word), deduped 8 s, tallied in `RS.loot`/`STATE.loot`;
-  called from the main loop (`reward`), `MatchOver` and `DoChests`. `RunSummary()` at Finish / died. `DoResult` sends VICTORY/DEFEAT.
+- Discord (`Webhook`, `WebhookShots`): `Hook(msg)`/`HookSend(json, img)` write the JSON to `%TEMP%\aad_hook` and run curl.exe hidden.
+  Item Tracking (user wish, like Capy's macro): ONE embed card per dungeon run - `TRACK` items (Gems, Stat Cube, Perfect Stat Cube,
+  Star Remnant, Cursed Token, Snow Reaper, April Coins) + depth reached + rooms won/lost (`Trk()` = `STATE.trk`).
+  `RewardSeen(r)` reads reward popups ("Name (xN)" or the line above a rarity word, deduped 8 s) from the main loop, `MatchOver`, `DoChests`.
+  Finish / died -> `SummaryDue()`; the main loop sends `RunSummary()` 25 s later or on the next lobby/route screen (rewards after Finish count).
 - `StopAfterLosses` (default 4): `STATE.lossRow` counts DEFEATs in a row (VICTORY resets); at the limit -> Discord message + `Reload()` (= F3).
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`

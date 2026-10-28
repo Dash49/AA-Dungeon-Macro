@@ -446,11 +446,11 @@ BuildGui() {
     ; ------------------------------------- แท็บ 6: Discord / หยุดเอง
     tab.UseTab(6)
     G.AddGroupBox("x25 y45 w750 h250", "แจ้งเตือนเข้า Discord (Webhook)")
-    G.AddText("x40 y75 w720 cGray", "ส่งเข้าห้อง Discord ทุกครั้งที่ได้ของ (หีบ, เหรียญ, Trait/Stat Reroll, เพชร, Cursed Token, ยูนิต ฯลฯ) + ผลแต่ละห้อง (ชนะ/แพ้) + สรุปของทั้งรอบ")
+    G.AddText("x40 y75 w720 cGray", "จบดันเจี้ยนแต่ละรอบ (ผ่านชั้น 20 รับรางวัลแล้ว หรือตาย) ส่งการ์ด Item Tracking: Gems, Stat Cube, Perfect Stat Cube, Star Remnant, Cursed Token, Snow Reaper, April Coins + ไปถึงชั้นไหน ชนะ/แพ้กี่ห้อง")
     G.AddText("x40 y110 w150", "Webhook URL")
     C.hook := G.AddEdit("x195 y106 w570")
     C.hook.OnEvent("Change", (*) => MarkDirty())
-    C.hookShot := G.AddCheckbox("x40 y145 w720", "แนบรูปหน้าจอไปด้วยทุกครั้งที่ได้ของ (WebhookShots)")
+    C.hookShot := G.AddCheckbox("x40 y145 w720", "แนบรูปหน้าจอไปด้วยตอนมาโครหยุดเพราะแพ้ติดกัน (WebhookShots)")
     C.hookShot.OnEvent("Click", (*) => MarkDirty())
     G.AddButton("x40 y180 w200 h30", "ส่งข้อความทดสอบ").OnEvent("Click", (*) => HookTest())
     G.AddText("x40 y222 w720 cGray", "วิธีเอา URL: ห้อง Discord > ตั้งค่าห้อง (เฟือง) > Integrations > Webhooks > New Webhook > Copy Webhook URL`nปล่อยว่าง = ไม่ส่ง   ต้องมี curl.exe (มีใน Windows 10/11 อยู่แล้ว)")

@@ -37,6 +37,11 @@ global MT := {}
 ; two units that fuse when the skill of one of them is used: [a, b, result]
 ; (the one whose skill was used becomes the result, the other one is gone)
 global FUSIONS := [["Vego", "Carrot", "Fused Hero"]]
+; Item Tracking (Discord card after every dungeon run): [shown name, emoji, pattern on the reward name]
+global TRACK := [["Gems", "💎", "i)\bgems?\b"], ["Stat Cube", "🧊", "i)^(?!.*perfect).*stat\s*cube"],
+    ["Perfect Stat Cube", "✨", "i)perfect\s*stat\s*cube"], ["Star Remnant", "🌟", "i)star\s*remnant"],
+    ["Cursed Token", "🧿", "i)cursed\s*token"], ["Snow Reaper", "❄️", "i)snow\s*reaper"],
+    ["April Coins", "🪙", "i)april\s*coin"]]
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
@@ -554,6 +559,11 @@ Start() {
         if hung
             Out("Roblox responds again (" Round((A_TickCount - hung) / 1000) " s)"), hung := 0
         s := Screen(&r)
+        if (STATE.HasOwnProp("sumAt") && STATE.sumAt && (A_TickCount - STATE.sumAt > 25000
+            || RegExMatch(s, "^(lobby|intro|route|loading|vote)$"))) {
+            RunSummary(STATE.sumWhy)               ; the dungeon's rewards are in: Item Tracking card
+            STATE.sumAt := 0
+        }
         if (s != last) {
             Out("Screen: " s)
             last := s, since := A_TickCount, unkShot := false
@@ -616,7 +626,8 @@ Start() {
                 ; Continue does nothing here - close with the red X, then go
                 ; back to the lobby and start a new run from the Dungeon button
                 Out("You Died (all lives lost) - closing, back to lobby")
-                RunSummary("💀 died at depth " RS.depth)
+                tkd := Trk(), tkd.depth := Max(tkd.depth, RS.depth)
+                SummaryDue("💀 died (all lives lost)")
                 RS.depth := 0, RS.bossDone := false, RS.chestsDone := false, RS.died := true
                 ClickRef(1543, 182)
                 Wait(1500)
@@ -780,13 +791,12 @@ DoResult(r) {
     if (tries = 1) {
         Out(won ? "VICTORY" : "DEFEAT")
         STATE.lossRow := won ? 0 : (STATE.HasOwnProp("lossRow") ? STATE.lossRow : 0) + 1
+        tk := Trk()                                ; for the Item Tracking card
+        tk.wins += won ? 1 : 0, tk.losses += won ? 0 : 1, tk.depth := Max(tk.depth, RS.depth)
         lim := CFG.Get("StopAfterLosses", 4) + 0
-        Hook((won ? "✅ VICTORY" : "❌ DEFEAT") (RS.depth ? "  · depth " RS.depth : "")
-            . (RS.HasOwnProp("mapName") && RS.mapName != "" ? "  · " RS.mapName : "")
-            . (!won && lim > 0 ? "  (" STATE.lossRow "/" lim " in a row)" : ""))
         if (!won && lim > 0 && STATE.lossRow >= lim) {
             Out("lost " STATE.lossRow " rooms in a row - stopping the macro (StopAfterLosses=" lim ")")
-            Hook("🛑 lost " STATE.lossRow " rooms in a row - the macro stopped. Check the plan / units, then press F2.", HookShot())
+            RunSummary("🛑 lost " STATE.lossRow " rooms in a row - the macro stopped (press F2 to go on)", HookShot())
             Sleep 3000                             ; (let the message go out)
             Reload()                               ; = F3: stopped, waiting for F2
         }
@@ -1585,7 +1595,7 @@ DoLeave(r) {
         return
     }
     Out("Run finished -> Finish")
-    RunSummary("run finished (depth " RS.depth ")")
+    SummaryDue("🏁 dungeon finished")             ; the card goes out once the rewards are in
     if Find(r, "Finish", &x, &y)
         ClickAt(x, y)
     else
@@ -1608,7 +1618,8 @@ JsonStr(str) {
     str := StrReplace(str, "`r", ""), str := StrReplace(str, "`n", "\n"), str := StrReplace(str, "`t", " ")
     return '"' str '"'
 }
-Hook(msg, img := "") {
+Hook(msg, img := "") => HookSend('{"username":"AA Dungeon Macro","content":' JsonStr(SubStr(msg, 1, 1900)) '}', img)
+HookSend(payload, img := "") {
     static seq := 0
     url := Trim(CFG.Get("Webhook", ""))
     if !RegExMatch(url, "i)^https://([\w-]+\.)?discord(app)?\.com/api/webhooks/")
@@ -1619,7 +1630,7 @@ Hook(msg, img := "") {
         DirCreate(dir)
         js := dir "\m" seq ".json"
         try FileDelete(js)
-        FileAppend('{"username":"AA Dungeon Macro","content":' JsonStr(SubStr(msg, 1, 1900)) '}', js, "UTF-8-RAW")
+        FileAppend(payload, js, "UTF-8-RAW")
         if (img != "" && FileExist(img))
             cmd := 'curl.exe -s -m 30 -F "payload_json=<' js '" -F "file1=@' img '" "' url '"'
         else
@@ -1667,28 +1678,39 @@ RewardSeen(r) {
     if (rk = lastK && A_TickCount - lastAt < 8000)
         return
     lastK := rk, lastAt := A_TickCount
-    for tal in [STATE, RS] {
-        if !tal.HasOwnProp("loot")
-            tal.loot := Map()
-        tal.loot[item] := tal.loot.Get(item, 0) + cnt
-    }
-    Out("  reward: " item " x" cnt (rar != "" ? " (" rar ")" : ""))
-    Hook("🎁 **" item "** x" cnt (rar != "" ? "  (" rar ")" : "") (RS.depth ? "  · depth " RS.depth : ""), HookShot())
+    tk := Trk(), what := ""
+    for tr in TRACK
+        if RegExMatch(item, tr[3]) {
+            tk.items[tr[1]] := tk.items.Get(tr[1], 0) + cnt
+            what := tr[1]
+            break
+        }
+    Out("  reward: " item " x" cnt (rar != "" ? " (" rar ")" : "") (what != "" ? "  -> tracked as " what : ""))
 }
-; what this run gave (Discord), then start counting again
-RunSummary(why) {
-    txt := ""
-    if RS.HasOwnProp("loot")
-        for it, c in RS.loot
-            txt .= "`n• " it " x" c
-    if (RS.coins >= 0)
-        txt .= "`n• dungeon coins now: " RS.coins
-    all := ""
-    if STATE.HasOwnProp("loot")
-        for it, c in STATE.loot
-            all .= (all = "" ? "" : ", ") it " x" c
-    Hook("🏁 " why (txt != "" ? "`n**This run:**" txt : "") (all != "" ? "`n**Since F2:** " all : ""))
-    RS.loot := Map()
+; this dungeon run's tally (Item Tracking card)
+Trk() {
+    if !STATE.HasOwnProp("trk")
+        STATE.trk := {items: Map(), depth: 0, wins: 0, losses: 0, start: A_TickCount}
+    return STATE.trk
+}
+SummaryDue(why) {
+    STATE.sumAt := A_TickCount, STATE.sumWhy := why
+}
+; the Item Tracking card for one dungeon run (Discord embed), then count again from 0
+RunSummary(why, img := "") {
+    tk := Trk()
+    tk.depth := Max(tk.depth, RS.depth)
+    fl := ""
+    for tr in TRACK
+        fl .= '{"name":' JsonStr(tr[2] " " tr[1]) ',"value":"' tk.items.Get(tr[1], 0) '","inline":true},'
+    fl .= '{"name":"🏔️ Depth reached","value":"' tk.depth '/' RS.maxDepth '","inline":true},'
+    fl .= '{"name":"✅ Won","value":"' tk.wins '","inline":true},'
+    fl .= '{"name":"❌ Lost","value":"' tk.losses '","inline":true}'
+    mins := Round((A_TickCount - tk.start) / 60000)
+    HookSend('{"username":"AA Dungeon Macro","embeds":[{"title":"📦 Item Tracking","description":'
+        . JsonStr(why "  (" mins " min)") ',"color":5793266,"fields":[' fl ']}]}', img)
+    Out("Item Tracking sent: depth " tk.depth ", won " tk.wins ", lost " tk.losses)
+    STATE.trk := {items: Map(), depth: 0, wins: 0, losses: 0, start: A_TickCount}
 }
 
 ; ================================================================ plan
