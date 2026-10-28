@@ -1654,38 +1654,40 @@ HookShot() {
     return FileExist(nf) ? nf : f
 }
 ; a reward popup: "Money (Dungeon) (x53)" + "Common", or a unit name + its rarity.
-; Noted once (the same popup is seen several times), counted for this run and
-; this session, sent to Discord with a picture.
+; Each item noted once (the same popup is seen several times); TRACK items are
+; counted for the Item Tracking card of this dungeon run.
 RewardSeen(r) {
-    static lastK := "", lastAt := 0
+    static seen := Map()                           ; item|count -> when (the same popup is read several times)
     if !IsObject(r)
         return
-    item := "", cnt := 1, rar := "", prevT := ""
+    got := [], rar := "", prevT := ""
     for ln in Lines(r) {
         tx := Trim(RegExReplace(ln.t, "\s+", " "))
-        if (item = "" && RegExMatch(tx, "^(.*?)\s*\(\s*[xX]\s*(\d[\d,]*)\s*\)", &m) && Trim(m[1]) != "")
-            item := Trim(m[1]), cnt := Integer(StrReplace(m[2], ","))
-        else if RegExMatch(tx, "i)^(Common|Uncommon|Rare|Epic|Legendary|Mythic|Secret|Exclusive|Celestial)$", &m2) {
+        ; "Money (Dungeon) (x53)" / "Rare Chest (Dungeon) (xl)" - every such line (end screens list several)
+        if RegExMatch(tx, "^(.*?)\s*\(\s*[xX]\s*([\d,lI|]+)\s*\)", &m) && Trim(m[1], " +-—~.") != "" {
+            num := RegExReplace(RegExReplace(m[2], "[lI|]", "1"), "\D")
+            got.Push({item: Trim(m[1], " +-—~."), cnt: (num != "") ? Integer(num) : 1})
+        } else if RegExMatch(tx, "i)^(Common|Uncommon|Rare|Epic|Legendary|Mythic|Secret|Exclusive|Celestial)$", &m2) {
             rar := m2[1]
-            if (item = "" && prevT != "" && !InStr(prevT, "Click"))
-                item := prevT
+            if (!got.Length && prevT != "" && !InStr(prevT, "Click"))
+                got.Push({item: prevT, cnt: 1})    ; a unit / item without "(xN)": the line above its rarity
         }
         prevT := tx
     }
-    if (item = "")
-        return
-    rk := item "|" cnt
-    if (rk = lastK && A_TickCount - lastAt < 8000)
-        return
-    lastK := rk, lastAt := A_TickCount
-    tk := Trk(), what := ""
-    for tr in TRACK
-        if RegExMatch(item, tr[3]) {
-            tk.items[tr[1]] := tk.items.Get(tr[1], 0) + cnt
-            what := tr[1]
-            break
-        }
-    Out("  reward: " item " x" cnt (rar != "" ? " (" rar ")" : "") (what != "" ? "  -> tracked as " what : ""))
+    for g in got {
+        rk := g.item "|" g.cnt
+        if (seen.Has(rk) && A_TickCount - seen[rk] < 8000)
+            continue
+        seen[rk] := A_TickCount
+        tk := Trk(), what := ""
+        for tr in TRACK
+            if RegExMatch(g.item, tr[3]) {
+                tk.items[tr[1]] := tk.items.Get(tr[1], 0) + g.cnt
+                what := tr[1]
+                break
+            }
+        Out("  reward: " g.item " x" g.cnt (rar != "" ? " (" rar ")" : "") (what != "" ? "  -> tracked as " what : ""))
+    }
 }
 ; this dungeon run's tally (Item Tracking card)
 Trk() {
