@@ -121,7 +121,7 @@ LoadConfig() {
         "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
-        "StopAfterLosses", 4, "Webhook", "", "WebhookShots", 1,
+        "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -950,6 +950,51 @@ FlatTile(xr) {
     return (sd < 1.6 || sd > 15)
 }
 
+; lives on the room board: "3/5" right under a row of red hearts -> {left, max}, left -1 = not seen
+ReadLives() {
+    for rr in [OcrRef(480, 690, 1440, 900, 2), OcrAll()] {
+        for ln in Lines(rr) {
+            if !RegExMatch(Trim(ln.t), "^([0-9])\s*[/lI|\\]\s*([3-9])$", &m) || Integer(m[1]) > Integer(m[2])
+                continue
+            Snap()                                 ; hearts above the text (not some other "1/3")
+            n := 0, yy := ln.y - ln.h * 3.5
+            while (yy <= ln.y - ln.h * 0.8) {
+                xx := ln.x - 70 * WIN.u
+                while (xx <= ln.x + ln.w + 70 * WIN.u) {
+                    c := RGB(Color(xx, yy))
+                    n += (c.r > 150 && c.g < 80 && c.b < 90) ? 1 : 0
+                    xx += 3
+                }
+                yy += 3
+            }
+            if (n >= 12)
+                return {left: Integer(m[1]), max: Integer(m[2])}
+        }
+    }
+    h := RedHearts()                               ; text not read: count the red hearts (the grey
+    return (h >= 1 && h <= 9) ? {left: h, max: 0} : {left: -1, max: 0}   ; empty ones can't be told apart)
+}
+; red (full) hearts in the row under the current room tile (y ~728): runs of red 14-34 px wide
+RedHearts() {
+    Snap()
+    best := 0
+    for yy in [722, 726, 730, 734] {
+        cnt := 0, run := 0, gap := 0
+        xx := 450
+        while (xx <= 1480) {
+            c := RGB(Color(PX(xx), PY(yy)))
+            if (c.r > 110 && c.g < 40 && c.b < 40) {
+                run += 2, gap := 0
+            } else if (run > 0 && ++gap > 2) { ; a heart ended
+                cnt += (run >= 14 && run <= 34) ? 1 : 0   ; (reference px)
+                run := 0, gap := 0
+            }
+            xx += 2
+        }
+        best := Max(best, cnt)
+    }
+    return best
+}
 ReadRoute() {
     res := {depth: 0, max: 20, coins: -1, tiles: []}
     ; depth "13/20"
@@ -1076,6 +1121,20 @@ DoRoute() {
         RS.coins := r.coins
     if (r.depth)
         RS.depth := r.depth, RS.maxDepth := r.max
+    lv := ReadLives()                              ; the hearts under the room tile: "3/5"
+    if (lv.left >= 0) {
+        if (!RS.HasOwnProp("lives") || RS.lives != lv.left)
+            Out("  lives: " lv.left "/" (lv.max ? lv.max : "?"))
+        RS.lives := lv.left
+        stopAt := CFG.Get("StopAtLives", 1) + 0
+        if (stopAt > 0 && lv.left <= stopAt) {
+            Out("only " lv.left " lives left - stopping the macro (StopAtLives=" stopAt ")")
+            tkd := Trk(), tkd.depth := Max(tkd.depth, RS.depth)
+            RunSummary("🛑 only " lv.left (lv.max ? "/" lv.max : "") " lives left - the macro stopped (press F2 to go on)", HookShot())
+            Sleep 3000                             ; (let the message go out)
+            Reload()                               ; = F3: stopped, waiting for F2
+        }
+    }
     ; Every route = this tile, then one of the rooms above it. A tile is
     ; worth its own points + Lookahead x the best room after it (you pick
     ; that one next time) + a little for a 2nd good choice there. Same

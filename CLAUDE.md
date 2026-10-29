@@ -90,6 +90,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   Star Remnant, Cursed Token, Snow Reaper, April Coins) + depth reached + rooms won/lost (`Trk()` = `STATE.trk`).
   `RewardSeen(r)` reads reward popups ("Name (xN)" or the line above a rarity word, deduped 8 s) from the main loop, `MatchOver`, `DoChests`.
   Finish / died -> `SummaryDue()`; the main loop sends `RunSummary()` 25 s later or on the next lobby/route screen (rewards after Finish count).
+- `StopAtLives` (default 1): `ReadLives()` on the room board ("3/5" under red hearts, `DoRoute`); lives <= it -> card + `Reload()`.
 - `StopAfterLosses` (default 4): `STATE.lossRow` counts DEFEATs in a row (VICTORY resets); at the limit -> Discord message + `Reload()` (= F3).
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`

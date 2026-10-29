@@ -35,7 +35,7 @@ global DEF := Map(
     "HillWalk", 2.5, "HillRun", 1, "HillZoomStep", 3, "HillZoomTries", 2, "CamZoom", 24,
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
-    "StopAfterLosses", 4, "Webhook", "", "WebhookShots", 1,
+    "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -454,9 +454,10 @@ BuildGui() {
     C.hookShot.OnEvent("Click", (*) => MarkDirty())
     G.AddButton("x40 y180 w200 h30", "ส่งข้อความทดสอบ").OnEvent("Click", (*) => HookTest())
     G.AddText("x40 y222 w720 cGray", "วิธีเอา URL: ห้อง Discord > ตั้งค่าห้อง (เฟือง) > Integrations > Webhooks > New Webhook > Copy Webhook URL`nปล่อยว่าง = ไม่ส่ง   ต้องมี curl.exe (มีใน Windows 10/11 อยู่แล้ว)")
-    G.AddGroupBox("x25 y310 w750 h110", "หยุดมาโครเอง")
+    G.AddGroupBox("x25 y310 w750 h150", "หยุดมาโครเอง")
     AddNum("StopAfterLosses", "แพ้ติดกันกี่ห้องแล้วหยุด", 40, 345, "ห้อง  (0 = ไม่หยุด, ค่าเริ่มต้น 4)  หยุดแล้วส่งแจ้งเข้า Discord ด้วย", 420)
-    G.AddText("x40 y385 w720 cGray", "หยุด = เหมือนกด F3 (มาโครรออยู่ กด F2 เพื่อเริ่มใหม่)  ชนะ 1 ห้องนับใหม่จาก 0")
+    AddNum("StopAtLives", "หัวใจเหลือเท่านี้แล้วหยุด", 40, 380, "ดวง  (เช่น 1 = เหลือ 1/5 แล้วหยุด, 0 = ไม่หยุด)  อ่านจากหัวใจใต้ห้องตอนเลือกห้อง", 420)
+    G.AddText("x40 y420 w720 cGray", "หยุด = เหมือนกด F3 (มาโครรออยู่ กด F2 เพื่อเริ่มใหม่)  แพ้ติดกัน: ชนะ 1 ห้องนับใหม่จาก 0")
 
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
