@@ -36,6 +36,7 @@ global DEF := Map(
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
+    "StuckRejoin", 10, "PrivateServer", "",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -458,6 +459,12 @@ BuildGui() {
     AddNum("StopAfterLosses", "แพ้ติดกันกี่ห้องแล้วหยุด", 40, 345, "ห้อง  (0 = ไม่หยุด, ค่าเริ่มต้น 4)  หยุดแล้วส่งแจ้งเข้า Discord ด้วย", 420)
     AddNum("StopAtLives", "หัวใจเหลือเท่านี้แล้วหยุด", 40, 380, "ดวง  (เช่น 1 = เหลือ 1/5 แล้วหยุด, 0 = ไม่หยุด)  อ่านจากหัวใจใต้ห้องตอนเลือกห้อง", 420)
     G.AddText("x40 y420 w720 cGray", "หยุด = เหมือนกด F3 (มาโครรออยู่ กด F2 เพื่อเริ่มใหม่)  แพ้ติดกัน: ชนะ 1 ห้องนับใหม่จาก 0")
+    G.AddGroupBox("x25 y470 w750 h150", "ค้างนาน = ปิดเกมแล้วเข้าใหม่ (เซิร์ฟ VIP)")
+    AddNum("StuckRejoin", "ค้างอยู่ที่เดิมเกินกี่นาที", 40, 500, "นาที  (0 = ปิดระบบนี้, ค่าเริ่มต้น 10)", 420)
+    G.AddText("x40 y540 w150", "ลิงก์เซิร์ฟ VIP")
+    C.ps := G.AddEdit("x195 y536 w570")
+    C.ps.OnEvent("Change", (*) => MarkDirty())
+    G.AddText("x40 y572 w720 cGray", "ค้าง = ไม่มีอะไรคืบเลย (ไม่เปลี่ยนหน้า ไม่วาง ไม่อัป ไม่ขึ้นขั้นใหม่) -> ปิด Roblox, เปิดลิงก์นี้ (เบราว์เซอร์ต้องล็อกอิน Roblox ไว้`nและติ๊ก 'เปิด Roblox เสมอ' ไว้) แล้วมาโครเริ่มเองอีกครั้ง  ไม่ใส่ลิงก์ = แค่รีสตาร์ทมาโคร")
 
     ; ---------------------------------------------------- ปุ่มล่าง
     tab.UseTab()
@@ -1294,6 +1301,8 @@ LoadSettings() {
             C.finish.Value := (StrLower(val) = "stop") ? 2 : 1
         else if (k = "Webhook")
             C.hook.Value := val
+        else if (k = "PrivateServer")
+            C.ps.Value := val
         else if (k = "WebhookShots")
             C.hookShot.Value := (val + 0) ? 1 : 0
         else if (k = "UpgradeMode")
@@ -1343,6 +1352,7 @@ SaveAll(restart) {
         IniWrite(SPEEDS[C.speed.Value ? C.speed.Value : 2], INI, "Settings", "Speed")
         IniWrite(UPMODES[C.upmode.Value ? C.upmode.Value : 1], INI, "Settings", "UpgradeMode")
         IniWrite(Trim(C.hook.Value), INI, "Settings", "Webhook")
+        IniWrite(Trim(C.ps.Value), INI, "Settings", "PrivateServer")
         IniWrite(C.hookShot.Value ? 1 : 0, INI, "Settings", "WebhookShots")
         for i, dd in C.type
             IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)

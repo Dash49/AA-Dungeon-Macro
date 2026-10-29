@@ -91,6 +91,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   `RewardSeen(r)` reads reward popups ("Name (xN)" or the line above a rarity word, deduped 8 s) from the main loop, `MatchOver`, `DoChests`.
   Finish / died -> `SummaryDue()`; the main loop sends `RunSummary()` 25 s later or on the next lobby/route screen (rewards after Finish count).
 - `StopAtLives` (default 1): `ReadLives()` on the room board ("3/5" under red hearts, `DoRoute`); lives <= it -> card + `Reload()`.
+- `StuckRejoin` (min, default 10) + `PrivateServer` (link): `Progress(what)` marks real progress (known screen change, plan step,
+  unit placed, level bought; Windows locked counts too). `Watchdog` (30 s timer): no progress that long -> `Rejoin()`: Discord note,
+  close RobloxPlayerBeta.exe, `Run(link)` (browser), wait for the window, restart with `/autostart` (`AutoStart` waits for a big window).
 - `StopAfterLosses` (default 4): `STATE.lossRow` counts DEFEATs in a row (VICTORY resets); at the limit -> Discord message + `Reload()` (= F3).
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`

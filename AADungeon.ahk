@@ -98,7 +98,7 @@ OnMessage(0x4A, WatchCopy)                          ; panel / cards / match from
 OnExit((*) => StopWatchers())
 if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
     Out("Restarted after being stuck - starting again in 5 s")
-    SetTimer(Start, -5000)
+    SetTimer(AutoStart, -5000)
 }
 return
 
@@ -122,6 +122,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
+        "StuckRejoin", 10, "PrivateServer", "",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -169,12 +170,69 @@ ErrLog(e, mode) {
 ; call - once nothing was logged for an hour after the chests): restart
 ; the macro, and it starts again by itself.
 Watchdog() {
-    if (!STATE.run || STATE.pause || A_TickCount - STATE.hb < 300000)
+    if (!STATE.run || STATE.pause)
+        return
+    mins := CFG.Get("StuckRejoin", 10) + 0         ; the same task too long: close Roblox, rejoin
+    if (mins > 0 && STATE.HasOwnProp("taskAt") && A_TickCount - STATE.taskAt > mins * 60000) {
+        Rejoin("no progress for " mins " min (last: " STATE.taskWhat ")")
+        return
+    }
+    if (A_TickCount - STATE.hb < 300000)
         return
     Out("No progress for 5 min - restarting the macro")
     try Shot("stuck")
     Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
     ExitApp()
+}
+
+; something moved on (a new screen, plan step, unit placed, level bought) - for StuckRejoin
+Progress(what) {
+    STATE.taskAt := A_TickCount, STATE.taskWhat := what
+}
+; stuck: close Roblox, open the private server link (settings: PrivateServer) in the
+; browser, wait for Roblox, then start the macro again. No link: restart the macro only.
+Rejoin(why) {
+    link := Trim(CFG.Get("PrivateServer", ""))
+    Out("STUCK: " why " - " (link != "" ? "closing Roblox and joining the private server" : "no PrivateServer link in settings - restarting the macro only"))
+    try Shot("stuck")
+    Hook("🔁 stuck: " why " - " (link != "" ? "closing Roblox and joining the private server again" : "restarting the macro"), HookShot())
+    STATE.taskAt := A_TickCount                    ; (no second rejoin while this one runs)
+    if (link != "") {
+        StopWatchers()
+        Loop 5 {                                   ; close Roblox
+            if !ProcessExist("RobloxPlayerBeta.exe")
+                break
+            try ProcessClose("RobloxPlayerBeta.exe")
+            Sleep 1500
+        }
+        Sleep 2000
+        try Run(link)                              ; the browser opens Roblox in that server
+        catch as e
+            Out("  could not open the link: " e.Message)
+        Loop 90 {                                  ; up to 3 min for the Roblox window
+            Sleep 2000
+            if WinExist("ahk_exe RobloxPlayerBeta.exe")
+                break
+        }
+        Sleep 25000                                ; the lobby loads
+        try WinMaximize("ahk_exe RobloxPlayerBeta.exe")
+        try WinActivate("ahk_exe RobloxPlayerBeta.exe")
+    }
+    Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
+    ExitApp()
+}
+; /autostart: wait (up to 5 min) for a big Roblox window, then F2
+AutoStart() {
+    static tries := 0
+    if (!FindRoblox() || WIN.w < 1200) {
+        if (++tries <= 30) {
+            Status("waiting for Roblox (" tries ")")
+            try WinMaximize("ahk_exe RobloxPlayerBeta.exe")
+            SetTimer(AutoStart, -10000)
+            return
+        }
+    }
+    Start()
 }
 
 Status(msg) {
@@ -184,6 +242,7 @@ Status(msg) {
 
 TogglePause() {
     STATE.pause := !STATE.pause
+    Progress("resumed")
     Out(STATE.pause ? "Paused" : "Resumed")
     Status(STATE.pause ? "PAUSED - F4 to resume" : "running")
 }
@@ -200,7 +259,7 @@ Hold() {
         if IsLocked() {
             Out("Windows is locked - waiting until it is unlocked (the macro can't see or click the game)")
             while IsLocked() {
-                STATE.hb := A_TickCount
+                STATE.hb := A_TickCount, STATE.taskAt := A_TickCount   ; (locked is not stuck)
                 Sleep 1000
             }
             Out("Windows unlocked - going on")
@@ -532,6 +591,7 @@ Start() {
         return
     STATE.run := true
     STATE.hb := A_TickCount
+    Progress("start")
     StartWatchers()
     ; keep the screen on and the PC awake while the macro runs (a screen
     ; that turns off can lock Windows, and then nothing can be clicked)
@@ -541,7 +601,7 @@ Start() {
     Focus()
     Out("Started. client " WIN.w "x" WIN.h " scale " Round(WIN.u, 3) ", plan " MT.planSteps.Length " steps")
     Status("running")
-    last := "", since := A_TickCount, closes := 0, hung := 0, unkShot := false
+    last := "", lastKnown := "", since := A_TickCount, closes := 0, hung := 0, unkShot := false
     Loop {
         Hold()
         STATE.hb := A_TickCount
@@ -565,6 +625,8 @@ Start() {
             STATE.sumAt := 0
         }
         if (s != last) {
+            if (s != "unknown" && s != lastKnown)
+                Progress("screen " s), lastKnown := s
             Out("Screen: " s)
             last := s, since := A_TickCount, unkShot := false
             if RegExMatch(s, "^(shrine|shop|chests|result|afterroom|leave|intro|died|disconnect|vote|reward)$")
@@ -1885,6 +1947,7 @@ PlayMatch() {
     for i, st in MT.planSteps {
         Status("step " i "/" MT.planSteps.Length ": " st.text)
         Out("Step " i "/" MT.planSteps.Length ": " st.text)
+        Progress("step " i ": " st.text)
         MT.stepIdx := i, MT.curStep := st          ; saving phases look back at steps 1..i-1
         r := RunStep(st)
         if (r = "end") {
@@ -2961,6 +3024,7 @@ PlaceUnit(slot, style := "random", pt0 := "") {
             MT.good.Push({x: c.x, y: c.y})
             if (style = "group" && !MT.HasOwnProp("lastGroup"))
                 MT.lastGroup := {x: c.x, y: c.y}
+            Progress("placed unit " slot)
             Out("  placed unit " slot " #" n " at " Round(c.x) "," Round(c.y) " (try " fails + 1
                 . (style != "random" ? ", " style : "") ")" (byPanel ? "  (its panel: " pn ")"
                 : (n0 < 0 && IsSet(y1) && yb > 0) ? "  (yen " yb " -> " y1 ")" : ""))
@@ -4595,6 +4659,7 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
         MT.paying := false
         if (r = "ok") {
             MT.need := 0, lastOk := A_TickCount
+            Progress("upgraded unit " pick.slot)
             Out("  unit " pick.slot " #" pick.n (SlotName(pick.slot) != "" ? " (" SlotName(pick.slot) ")" : "") " -> level " pick.lvl)
         } else if (A_TickCount - lastOk > 30000 && A_TickCount - lastSay > 30000) {
             lastSay := A_TickCount                 ; stuck? say why, for the next report
