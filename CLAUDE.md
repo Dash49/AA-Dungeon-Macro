@@ -107,6 +107,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`
   (`ShotRoute`, newest 2000) with what was read and the chosen route in `shots\route\routes.txt`.
+  After the walk / camera of every match (`ShotWalk`): `shots\walk` (newest 2000) + `walks.txt` (map, Capy route / StageWalk / no walk).
 - OCR helpers: `OcrRef(x1,y1,x2,y2,scale)` on reference coords, `OcrAll()`, `Find(r, "text", &x, &y)`.
 
 ## Reading a bug report

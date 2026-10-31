@@ -2670,8 +2670,31 @@ StartMoves(onVote) {
     if MapRouteGo(onVote)
         return
     RS.capyCam := false
+    howWalk := (RS.stage != "" && !RS.stageWalked) ? "StageWalk " RS.stageMove : "no walk"
     StageWalk()
     CameraSetup()
+    ShotWalk(howWalk)
+}
+; ShotScreens=1: a picture of every map right after the walk (where the units go from here),
+; shots\walk\<time>_<map>_walk.jpg (newest 2000) + shots\walk\walks.txt (map, how it walked)
+ShotWalk(how) {
+    if !CFG.Get("ShotScreens", 0)
+        return
+    nm := MatchMap()
+    Sleep 300                                      ; the camera settles
+    f := ShotUi(RegExReplace(nm != "" ? nm : "unknown", "[^A-Za-z0-9]") "_walk", "walk", 2000)
+    if (f = "")
+        return
+    SplitPath(f, &fn)
+    try FileAppend(fn "  |  " (nm != "" ? nm : "?") "  |  " how "`n", A_ScriptDir "\shots\walk\walks.txt", "UTF-8")
+}
+; the map of this match as read: the room card just entered or the loading screen, newest (5 min)
+MatchMap() {
+    rm := (RS.HasOwnProp("roomMap") && A_TickCount - RS.roomAt < 300000) ? RS.roomMap : ""
+    lm := (RS.HasOwnProp("mapName") && RS.HasOwnProp("mapAt") && A_TickCount - RS.mapAt < 300000) ? RS.mapName : ""
+    if (rm != "" && lm != "")
+        return (RS.roomAt > RS.mapAt) ? KnownMap(rm) : lm
+    return (rm != "") ? KnownMap(rm) : lm
 }
 ; the map of this match: the room card just entered, or the loading screen (5 min) -> WALKS name
 MapRoute() {
@@ -2709,10 +2732,11 @@ MapRouteGo(onVote) {
     RS.stageWalked := true                         ; StageWalk is not used on top of it
     Out("Map route: " nm " (Capy's camera, teleport to spawn, walk)")
     CapyCamera()
-    if !SpawnReset()
+    if !(sp := SpawnReset())
         Out("  teleport to spawn did not work - walking from here")
-    PlayRoute(nm, WALKS[nm])
+    ok := PlayRoute(nm, WALKS[nm])
     Wait(300)
+    ShotWalk("Capy route " nm (sp ? "" : ", no teleport") (ok ? "" : ", walk stopped"))
     return true
 }
 ; Capy's spawn reset: game settings (gear, bottom left), wheel notches down at his spot, then
@@ -2856,6 +2880,7 @@ PlayRoute(nm, spec) {
         if dn
             Send("{" k " up}")
     Out("  " nm ": walk " (ok ? "done (" Round((A_TickCount - t0) / 1000, 1) " s)" : "stopped - Roblox lost the focus"))
+    return ok
 }
 ; Stage name, read on the loading / vote screens. StageWalk lists stages
 ; where the start spot is too far from the path: "Magic Hill=a 3 jump|Other=d 2, w 1"
