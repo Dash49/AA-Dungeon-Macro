@@ -62,6 +62,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   a unit name exactly, else the big panel title (`PanelTitle`). `CheckPlaced()` (start of every upgrade step)
   re-places units that have no card. `FuseCheck()` after a skill: Vego + Carrot -> "Fused Hero" (`FUSIONS`),
   the clicked unit's slot then means the Fused Hero card, the partner is removed and never re-placed.
+  The game's fused name is LEARNED from the panel (`FuseLearn`, only after a skill on a Vego/Carrot slot, never a hotbar name):
+  `FuseFind` reads the unit's spot, then the partner's (the fused unit may stand there); `SpotPanel` learns on a name mismatch,
+  `ReplaceUnit` tries `FuseFind` before re-placing and never re-places a used-up partner (`MT.noReplace`).
   If the list position is lost, `CardByIdx` returns "?" and the old way below is used.
 - Old card ↔ slot way: if `Name<slot>` is set, `CardByName()` OCRs the names under the portraits
   (`CardNames`, cached 3 s) and matches them (`NameMatch`, fuzzy). Without a name it guesses from card order

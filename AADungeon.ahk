@@ -4633,6 +4633,8 @@ FuseCheck(u) {
             MT.noReplace := Map()
         MT.noReplace[ps] := true                   ; the partner is used up: never place it again
         Wait(2500)
+        if (u.x >= 0 && FuseFind(u))               ; its name on the panel at its spot / the partner's
+            return
         MT.fuseGen := (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0) + 1
         found := false
         if Census()
@@ -4652,6 +4654,81 @@ FuseCheck(u) {
         Out("  " f[1] " + " f[2] " fused -> " f[3] " (unit " u.slot "); upgrades of unit " u.slot " now go to " f[3])
         return
     }
+}
+
+; the fusion pair of a slot (Name<slot> = Vego or Carrot) -> {f, ps (partner slot, 0 = none)}, else ""
+FuseMember(sl) {
+    nm := Trim(CFG.Get("Name" sl, ""))
+    if (nm = "")
+        return ""
+    for f in FUSIONS {
+        other := (NameScore(nm, f[1]) >= 0.8) ? f[2] : (NameScore(nm, f[2]) >= 0.8) ? f[1] : ""
+        if (other = "")
+            continue
+        ps := 0
+        Loop 6
+            if (A_Index != sl && NameScore(Trim(CFG.Get("Name" A_Index, "")), other) >= 0.8)
+                ps := A_Index
+        return {f: f, ps: ps}
+    }
+    return ""
+}
+; A fusion unit whose skill was used shows a new name on its panel (the game's fused name, which
+; may not be FUSIONS' "Fused Hero"): that name is learned, so its upgrades go on instead of the
+; name check failing and the unit being placed again. Names of the hotbar units never count.
+; at = the unit whose spot showed it (the partner's spot: the fused unit stands there now)
+FuseLearn(u, newName, at := "") {
+    if (newName = "" || !(MT.HasOwnProp("skilled") && MT.skilled.Has(u.slot)))
+        return false
+    fm := FuseMember(u.slot)
+    if !IsObject(fm)
+        return false
+    Loop 6
+        if ((sn := Trim(CFG.Get("Name" A_Index, ""))) != "" && NameScore(newName, sn) >= 0.8)
+            return false                           ; a hotbar unit (the partner still standing)
+    if (MT.HasOwnProp("fusedSlot") && MT.fusedSlot = u.slot && MT.fusedName = newName && !IsObject(at))
+        return true
+    MT.fusedSlot := u.slot, MT.fusedName := newName, u.fname := newName
+    if fm.ps {
+        if !MT.HasOwnProp("noReplace")
+            MT.noReplace := Map()
+        MT.noReplace[fm.ps] := true                ; the partner is used up: never place it again
+        pi := 0
+        for i, w in MT.units                       ; one partner unit is gone (the one at that spot)
+            if (w.slot = fm.ps && (!pi || w = at))
+                pi := i
+        if pi
+            MT.units.RemoveAt(pi)
+    }
+    if (IsObject(at) && at != u)
+        u.x := at.x, u.y := at.y, u.spotBad := 0
+    MT.fuseGen := (MT.HasOwnProp("fuseGen") ? MT.fuseGen : 0) + 1
+    Out("  unit " u.slot " #" u.n ": fused -> '" newName "' (its panel" (IsObject(at) && at != u ? ", at the partner's spot" : "")
+        . "); upgrades of it go on with this name")
+    return true
+}
+; after a skill: read the panel at the unit's spot, then at the partner units' spots
+FuseFind(u) {
+    fm := FuseMember(u.slot)
+    if !IsObject(fm)
+        return false
+    spots := [u]
+    for v in MT.units
+        if (fm.ps && v.slot = fm.ps && v.x >= 0)
+            spots.Push(v)
+    for w in spots {
+        CloseUnitPanel()
+        MT.panelClick := A_TickCount
+        ClickRef(w.x, w.y)
+        WaitPanelData(800)
+        p := PanelInfo()
+        if (IsObject(p) && FuseLearn(u, p.name, w)) {
+            MT.panelFor := u
+            return true
+        }
+    }
+    CloseUnitPanel(), MT.panelFor := ""
+    return false
 }
 
 ; one level for unit u: "ok" "max" "poor" "lost" "retry"
@@ -4693,8 +4770,14 @@ SpotPanel(u) {
         Wait(300)
         p := PanelInfo()
     }
-    nm := SlotName(u.slot)
-    if (IsObject(p) && (nm = "" || p.name = "" || NameScore(p.name, nm) >= 0.6)) {
+    nm := SlotName(u.slot), orig := Trim(CFG.Get("Name" u.slot, ""))
+    if (IsObject(p) && (nm = "" || p.name = "" || NameScore(p.name, nm) >= 0.6
+        || (orig != "" && NameScore(p.name, orig) >= 0.6)    ; a copy that did not fuse
+        || (u.HasOwnProp("fname") && NameScore(p.name, u.fname) >= 0.6))) {
+        u.spotBad := 0
+        return p
+    }
+    if (IsObject(p) && FuseLearn(u, p.name)) {     ; its skill fused it: new name
         u.spotBad := 0
         return p
     }
@@ -4729,6 +4812,8 @@ ReplaceUnit(u) {
         }
     }
     CloseUnitPanel(), MT.panelFor := ""
+    if (MT.HasOwnProp("skilled") && MT.skilled.Has(u.slot) && FuseFind(u))
+        return "poor"                              ; fused: it stands at the partner's spot now
     if !(MT.HasOwnProp("zoomFixAt") && A_TickCount - MT.zoomFixAt < 60000) {
         MT.zoomFixAt := A_TickCount                ; first: the camera may have moved - set the
         Out("  unit " u.slot " #" u.n ": not at its spot - setting the camera zoom again first")
@@ -4745,6 +4830,10 @@ ReplaceUnit(u) {
     MT.placeGen := (MT.HasOwnProp("placeGen") ? MT.placeGen : 0) + 1
     if MT.capped.Has(u.slot) {                     ; the game said all are there: can't place more
         Out("  unit " u.slot " #" u.n " (" nm "): not found at its spot, but the game limit was reached - leaving it")
+        return "gone"
+    }
+    if (MT.HasOwnProp("noReplace") && MT.noReplace.Has(u.slot)) {   ; used up in a fusion
+        Out("  unit " u.slot " #" u.n " (" nm "): used up in a fusion - not placing it again")
         return "gone"
     }
     Out("  unit " u.slot " #" u.n " (" nm "): not found where it was placed - placing it again")
@@ -5175,6 +5264,9 @@ UseAbility(u, times) {
     }
     Wait(300)
     CloseUnitPanel()
+    if !MT.HasOwnProp("skilled")
+        MT.skilled := Map()
+    MT.skilled[u.slot] := true                     ; (FuseLearn: only after a skill)
     FuseCheck(u)
 }
 
