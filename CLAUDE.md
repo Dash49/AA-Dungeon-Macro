@@ -36,8 +36,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   (settings) curses get -1000; `EnterTile(t, true)` also reads "Curse of X" on the room card and closes it (`CloseRoomCard`)
   if avoided; only avoided rooms left -> entered anyway. Icons for the F8 picker: `Images/curses/*.png` (the picker downloads missing ones).
 - Before the start (`StartMoves`, vote screen or first look at a match): maps with a route in `WALKS` (Capy's recorded
-  key timings, `MapRoutes`=1) go `MapRouteGo`: `CameraSetup` -> `SpawnReset` (gear bottom left, OCR "Teleport to Spawn",
-  wheel-scroll the open panel, red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
+  key timings, `MapRoutes`=1) go `MapRouteGo`: `CapyCamera` (his Zoomtech moves; `RS.capyCam` -> CamZoomNow 20,
+  CameraSetup redoes it) -> `SpawnReset` (gear, Capy's 6 notches at his spot, `SpawnRow` OCR check, never a blind click:
+  Return to Lobby is the next row; red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
   Other maps: `StageWalk` then `CameraSetup` (old way).
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.
   Plan syntax: `place 1 x3 [random|near|far|group|spread|cover|center|at X,Y]`,

@@ -792,6 +792,8 @@ DoIntro(r) {
 ; Camera: look straight down on the character from high up (the view
 ; you play with). Right-drag tilts the camera, the wheel zooms out.
 CameraSetup(way := 1) {
+    if (RS.HasOwnProp("capyCam") && RS.capyCam)
+        return CapyCamera()                        ; a route map: keep Capy's view
     Focus()
     Out("Camera: top-down view (way " way ")")
     cx := Round(PX(960)), cy := Round(PY(540))
@@ -2667,6 +2669,7 @@ Walk(k, sec, run := -1) {
 StartMoves(onVote) {
     if MapRouteGo(onVote)
         return
+    RS.capyCam := false
     StageWalk()
     CameraSetup()
 }
@@ -2704,23 +2707,25 @@ MapRouteGo(onVote) {
         return false
     }
     RS.stageWalked := true                         ; StageWalk is not used on top of it
-    Out("Map route: " nm " (camera, teleport to spawn, walk)")
-    CameraSetup()
+    Out("Map route: " nm " (Capy's camera, teleport to spawn, walk)")
+    CapyCamera()
     if !SpawnReset()
         Out("  teleport to spawn did not work - walking from here")
     PlayRoute(nm, WALKS[nm])
     Wait(300)
     return true
 }
-; game settings (gear, bottom left) > "Teleport to Spawn" (scroll down to it), then close
+; Capy's spawn reset: game settings (gear, bottom left), 6 wheel notches down at his spot, then
+; "Teleport to Spawn" and the red X. His 800x600 spots are scaled to this window; the row is also
+; checked by OCR (the window is bigger, the scroll may stop elsewhere) and never clicked blind:
+; "Return to Lobby" is the row next to it.
 SpawnReset() {
     Focus()
     open := false
     Loop 2 {                                       ; the gear, then check the Settings title
         ClickRef(45, 1050, "l", "b")
-        Wait(900)
-        t := OcrRef(600, 195, 1010, 300, 2)
-        if (IsObject(t) && InStr(t.t, "Settings")) {
+        Sleep 1000
+        if SettingsOpen() {
             open := true
             break
         }
@@ -2729,32 +2734,27 @@ SpawnReset() {
         Out("  spawn: settings did not open")
         return false
     }
+    Loop 6                                         ; Capy: 6 notches, one every 350 ms, at (460,350)
+        SettingsWheel("WheelDown")
     done := false
-    Loop 12 {
-        for ln in Lines(OcrRef(620, 240, 1320, 800, 2)) {
-            lt := StrLower(RegExReplace(ln.t, "[^A-Za-z]"))
-            if (InStr(lt, "teleport") && InStr(lt, "spawn") && !InStr(lt, "lobby")) {
-                ClickAt(PX(1189), ln.y + 10 * WIN.u)   ; the button at the right end of the row
-                Out("  spawn: Teleport to Spawn clicked")
-                done := true
-                break
-            }
-        }
-        if done
+    Loop 22 {                                      ; not on screen yet: further down, then back up
+        if (y := SpawnRow()) {
+            cy := (Abs(y - PY(589)) < 25 * WIN.u) ? PY(589) : y   ; Capy's button spot (522,327)
+            ClickAt(PX(1180), cy)
+            Out("  spawn: Teleport to Spawn clicked" (cy = y ? " (row found " Round((y - PY(589)) / WIN.u) " px from Capy's spot)" : ""))
+            done := true
             break
-        MouseMove(Round(PX(960)), Round(PY(520)))  ; over the panel (it is open: the wheel scrolls it)
-        Sleep 60
-        Click "WheelDown"
-        Sleep 350
+        }
+        SettingsWheel(A_Index <= 8 ? "WheelDown" : "WheelUp")
     }
     if !done
-        Out("  spawn: 'Teleport to Spawn' not found in the settings")
-    Wait(1000)
-    Loop 2 {                                       ; red X of the settings window
+        Out("  spawn: 'Teleport to Spawn' not found in the settings - not clicking blind")
+    Sleep 1500
+    Loop 2 {                                       ; red X of the settings window (Capy: 584,151)
         Snap()
         n := 0, sx := 0, sy := 0
         yy := 150
-        while (yy <= 380) {
+        while (yy <= 420) {
             xx := 1200
             while (xx <= 1380) {
                 c := RGB(Color(PX(xx), PY(yy)))
@@ -2767,14 +2767,71 @@ SpawnReset() {
         if (n >= 10)
             ClickAt(sx / n, sy / n)
         else
-            ClickRef(1305, 233)
-        Wait(700)
-        t := OcrRef(600, 195, 1010, 300, 2)
-        if !(IsObject(t) && InStr(t.t, "Settings"))
+            ClickRef(1291, 272)
+        Sleep 700
+        if !SettingsOpen()
             break
     }
-    Wait(800)
+    Sleep 1000                                     ; Capy waits 1 s before walking
     return done
+}
+SettingsOpen() {
+    t := OcrRef(600, 195, 1010, 300, 2)
+    return (IsObject(t) && InStr(t.t, "Settings"))
+}
+SettingsWheel(dir) {
+    MouseMove(Round(PX(1068)), Round(PY(630)))     ; Capy's (460,350): inside the open panel
+    Sleep 50
+    Click dir
+    Sleep 350
+}
+; screen y of the "Teleport to Spawn" row in the open settings, 0 = not on screen
+SpawnRow() {
+    for ln in Lines(OcrRef(620, 240, 1320, 800, 2)) {
+        lt := StrLower(RegExReplace(ln.t, "[^A-Za-z]"))
+        if (InStr(lt, "teleport") && InStr(lt, "spawn") && !InStr(lt, "lobby"))
+            return ln.y + 10 * WIN.u               ; the button sits a bit below the title's middle
+    }
+    return 0
+}
+; Capy's "Zoomtech", the same moves: mouse at (400,330), 20 x 2 notches in (first person), hold
+; the right button, move 1500 px down (eased) while zooming out 20 notches, then 4 x 250 px more.
+; His routes were recorded with this camera - same view, same W/A/S/D directions.
+CapyCamera() {
+    Focus()
+    Out("Camera: Capy's top-down view")
+    cx := Round(PX(960)), cy := Round(PY(594))
+    MouseMove(cx, cy)
+    Sleep 100
+    Loop 20 {
+        SendEvent "{WheelUp 2}"
+        Sleep 50
+    }
+    Sleep 75
+    SendEvent "{RButton down}"
+    moved := 0
+    try {
+        Loop 28 {
+            i := A_Index, d := 0
+            if (i <= 16) {
+                dest := Round(1500 * (1 - Cos(i * 3.141592653589793 / 16)) / 2)
+                d := dest - moved, moved := dest
+            } else if (i > 24)
+                d := 250
+            if d
+                DllCall("mouse_event", "UInt", 0x0001, "Int", 0, "Int", d, "UInt", 0, "UPtr", 0)
+            if (i >= 5 && i <= 24)
+                SendEvent "{WheelDown}"
+            Sleep((i <= 16 || i > 24) ? 12 : 25)
+        }
+    } finally {
+        SendEvent "{RButton up}"
+    }
+    Sleep 150
+    MouseMove(cx, cy)
+    Sleep 300
+    RS.capyCam := true                             ; CamZoomNow = 20, CameraSetup redoes this one
+    RS.camDone := true
 }
 ; play "<ms><key><+|->" key timings (WALKS); stops (keys up) if Roblox loses the focus
 PlayRoute(nm, spec) {
@@ -3665,6 +3722,8 @@ FixFirstPerson() {
 ; CamZoom, or the closer one locked when hills only showed after zooming in
 CamZoomNow() {
     z := RS.HasOwnProp("zoomLock") ? RS.zoomLock : CFG.Get("CamZoom", 24) + 0
+    if (RS.HasOwnProp("capyCam") && RS.capyCam)    ; Capy's camera: 20 notches out
+        z := RS.HasOwnProp("zoomLock") ? Min(RS.zoomLock, 20) : 20
     return Max(0, Min(30, Round(z)))
 }
 ; n > 0 zooms in, n < 0 zooms out (mouse over the middle of the map)
