@@ -2024,7 +2024,7 @@ LoadPlan() {
         if (line = "")
             continue
         l := StrLower(line)
-        for th, en in Map("วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto", "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one",
+        for th, en in Map("ฟิวชั่น", "fusion", "ฟิวชัน", "fusion", "ฟิวส์", "fusion", "วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto", "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one",
             "สุ่ม", "random", "ชิดทาง", "near", "ไกล", "far", "กลุ่ม", "group", "กระจาย", "spread", "โค้ง", "cover", "กลาง", "center", "จุด", "at")
             l := StrReplace(l, th, en)
         if RegExMatch(l, "^place\s+([1-6])\s*(?:x\s*(\d+))?(?:\s+(random|near|far|group|spread|cover|center|at\s*(\d+)\s*,\s*(\d+)))?$", &m) {
@@ -2058,6 +2058,9 @@ LoadPlan() {
             steps.Push({k: "ability", slot: Integer(m[1]), n: m[2] != "" ? Integer(m[2]) : 1, text: line})
         else if RegExMatch(l, "^auto\s+([1-6])$", &m)
             steps.Push({k: "auto", slot: Integer(m[1]), text: line})
+        else if RegExMatch(l, "^fusion\s+([1-6])$", &m)          ; auto skill on (it fuses), then max
+            steps.Push({k: "fusion", slot: Integer(m[1]), targets: [Integer(m[1])], goal: "max", plus: 0,
+                style: "one", until: 0, text: line})
         else if RegExMatch(l, "^wait\s+(\d+)", &m)
             steps.Push({k: "wait", s: Integer(m[1]), text: line})
         else if RegExMatch(l, "^wave\s+(\d+)", &m)
@@ -2082,7 +2085,7 @@ PlayMatch() {
     Out("Match started - running the plan")
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
     for st in MT.planSteps                          ; the steps are shared between matches
-        st.done := false, st.want := "", st.tries := 0, st.said := ""
+        st.done := false, st.want := "", st.tries := 0, st.said := "", st.autoChk := false
     ; the vote panel can still be there for a moment - never place during it
     Loop 20 {
         if !InStr(AllText(), "Starts in")
@@ -2242,6 +2245,21 @@ RunStep(st) {
             u := FirstUnit(st.slot)
             if IsObject(u)
                 SetAuto(u)
+        case "fusion":                             ; auto skill on (the game fuses it), then max
+            if !MT.HasOwnProp("fuseStep")
+                MT.fuseStep := Map()
+            MT.fuseStep[st.slot] := true           ; its new name is learned (FuseLearn)
+            if !MT.HasOwnProp("skilled")
+                MT.skilled := Map()
+            MT.skilled[st.slot] := true
+            u := FirstUnit(st.slot)
+            if !IsObject(u)
+                return Out("  fusion: unit " st.slot " is not on the map - step skipped")
+            SetAuto(u)
+            Wait(2500)
+            if (u.x >= 0)
+                FuseFind(u)                        ; fused already? learn its name
+            return UpgradeTargets(st.targets, "max", 0, "one", 0, 240000)
         case "wait":
             Wait(st.s * 1000, false)               ; the plan's own wait: never faster
         case "wave":
@@ -4466,6 +4484,15 @@ CatchUp(need := 0) {
                     break
             } else if (st.k = "auto") {
                 CatchAuto(i, st)
+            } else if (st.k = "fusion") {          ; auto on (once), then its upgrades like an upgrade step
+                if !(st.HasOwnProp("autoChk") && st.autoChk) {
+                    st.autoChk := true
+                    CatchAuto(i, st)
+                    st.done := false
+                }
+                did := CatchUpgrade(i, st, need)
+                if did
+                    break
             } else
                 st.done := true                    ; skill presses can't be counted afterwards; waits run once
         }
@@ -4673,6 +4700,13 @@ FuseMember(sl) {
     }
     return ""
 }
+; a Vego/Carrot slot, or the slot of a "fusion" plan step (partner unknown without names)
+FuseUnit(sl) {
+    fm := FuseMember(sl)
+    if IsObject(fm)
+        return fm
+    return (MT.HasOwnProp("fuseStep") && MT.fuseStep.Has(sl)) ? {f: "", ps: 0} : ""
+}
 ; A fusion unit whose skill was used shows a new name on its panel (the game's fused name, which
 ; may not be FUSIONS' "Fused Hero"): that name is learned, so its upgrades go on instead of the
 ; name check failing and the unit being placed again. Names of the hotbar units never count.
@@ -4680,7 +4714,7 @@ FuseMember(sl) {
 FuseLearn(u, newName, at := "") {
     if (newName = "" || !(MT.HasOwnProp("skilled") && MT.skilled.Has(u.slot)))
         return false
-    fm := FuseMember(u.slot)
+    fm := FuseUnit(u.slot)
     if !IsObject(fm)
         return false
     Loop 6
@@ -4709,7 +4743,7 @@ FuseLearn(u, newName, at := "") {
 }
 ; after a skill: read the panel at the unit's spot, then at the partner units' spots
 FuseFind(u) {
-    fm := FuseMember(u.slot)
+    fm := FuseUnit(u.slot)
     if !IsObject(fm)
         return false
     spots := [u]
@@ -5107,7 +5141,7 @@ UpgradeSteps(slots, goal, plus, style, untilWave, timeout) {
     want := Map()
     for u in us
         want[u] := (goal = "plus") ? u.lvl + plus : (goal = "max") ? 999 : goal
-    if (MT.HasOwnProp("curStep") && IsObject(MT.curStep) && MT.curStep.k = "upgrade")
+    if (MT.HasOwnProp("curStep") && IsObject(MT.curStep) && (MT.curStep.k = "upgrade" || MT.curStep.k = "fusion"))
         MT.curStep.want := want                    ; for the saving-phase look back
     t0 := A_TickCount, lastWave := 0, lastCatch := 0, lastOk := A_TickCount, lastSay := 0
     Loop {

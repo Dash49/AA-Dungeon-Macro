@@ -67,7 +67,7 @@ upgrade 6 max one
 upgrade all max
 )"
 
-global KINDS := ["place", "upgrade", "ability", "auto", "wait", "wave"]
+global KINDS := ["place", "upgrade", "ability", "auto", "wait", "wave", "fusion"]
 global PLACE_KEYS := ["random", "near", "far", "group", "spread", "cover", "center", "at"]
 global PLACE_TH := ["สุ่มใกล้ทาง (ค่าเริ่มต้น)", "ชิดทางเดิน", "ไกลทางเดิน (ตัวฟาร์ม)", "รวมกลุ่มติดกัน",
     "กระจายห่างกัน", "จุดที่ทางผ่านเยอะ (โค้ง)", "กลางจอ", "กำหนดจุดเอง"]
@@ -176,7 +176,7 @@ global CURSE_NAMES := ["Explosion", "Flight", "Health", "Money", "Regen", "Shiel
 global CURSE_TH := ["ชมพูลายเฉียง", "หมวกแม่มดม่วง", "หัวใจม่วงเรียบ", "เหรียญน้ำเงิน", "หัวใจขอบขาว มี +",
     "โล่ไม้", "ตัวน้ำเงินมีหนาม", "พายุหมุนสีฟ้า", "เครื่องหมาย ? (ไม่รู้ว่าอะไร)"]
 global CurseAvoidVal := ""
-global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ"]
+global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ", "ฟิวชั่น (Auto + อัปตัน)"]
 
 global Steps := []          ; ขั้นตอนของแผน
 global Items := []          ; ของในร้าน {name, score, min}
@@ -590,7 +590,8 @@ NewStep(k) {
 
 ParseStep(line) {
     l := StrLower(Trim(line))
-    for th, en in Map("วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto",
+    for th, en in Map("ฟิวชั่น", "fusion", "ฟิวชัน", "fusion", "ฟิวส์", "fusion",
+        "วาง", "place", "อัพ", "upgrade", "อัป", "upgrade", "สกิล", "ability", "ออโต้", "auto",
         "รอ", "wait", "เวฟ", "wave", "ตัน", "max", "เฉลี่ย", "even", "ทีละตัว", "one",
         "สุ่ม", "random", "ชิดทาง", "near", "ไกล", "far", "กลุ่ม", "group", "กระจาย", "spread", "โค้ง", "cover",
         "กลาง", "center", "จุด", "at")
@@ -629,6 +630,10 @@ ParseStep(line) {
         s := NewStep("auto"), s.slots := [Integer(m[1])]
         return s
     }
+    if RegExMatch(l, "^fusion\s+([1-6])$", &m) {
+        s := NewStep("fusion"), s.slots := [Integer(m[1])]
+        return s
+    }
     if RegExMatch(l, "^wait\s+(\d+)$", &m) {
         s := NewStep("wait"), s.n := Integer(m[1])
         return s
@@ -658,6 +663,7 @@ StepCmd(s) {
             return t
         case "ability": return "ability " s.slots[1] " x" s.n
         case "auto":    return "auto " s.slots[1]
+        case "fusion":  return "fusion " s.slots[1]
         case "wait":    return "wait " s.n
         case "wave":    return "wave " s.n
         case "upgrade":
@@ -704,6 +710,7 @@ StepDesc(s) {
             return t
         case "ability": return "กดสกิล " SlotLabel(s.slots[1]) " จำนวน " s.n " ครั้ง"
         case "auto":    return "เปิดสกิล Auto " SlotLabel(s.slots[1])
+        case "fusion":  return "ฟิวชั่น " SlotLabel(s.slots[1]) ": เปิดสกิล Auto แล้วอัปให้ตัน (จำชื่อใหม่หลังฟิวส์เอง)"
         case "wait":    return "รอ " s.n " วินาที"
         case "wave":    return "รอจนถึงเวฟ " s.n
         case "upgrade":
@@ -778,7 +785,7 @@ BuilderStep(&why := "") {
         if cb.Value
             slots.Push(i)
     n := Trim(C.n.Value)
-    if (k = "place" || k = "ability" || k = "auto") {
+    if (k = "place" || k = "ability" || k = "auto" || k = "fusion") {
         if (slots.Length != 1) {
             why := "เลือกช่องยูนิต 1 ช่อง"
             return ""

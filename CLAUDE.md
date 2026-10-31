@@ -42,7 +42,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   Other maps: `StageWalk` then `CameraSetup` (old way).
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.
   Plan syntax: `place 1 x3 [random|near|far|group|spread|cover|center|at X,Y]`,
-  `upgrade 1,2 [max|to N|+N] [even|one] [until wave N]`, `ability 3 x2`, `auto 6`, `wait 5`, `wave 7`.
+  `upgrade 1,2 [max|to N|+N] [even|one] [until wave N]`, `ability 3 x2`, `auto 6`, `fusion 1` (auto on, then upgrade max; its slot learns the fused name - `MT.fuseStep`), `wait 5`, `wave 7`.
 - Placing: `PlaceAny()` → `PlaceUnit()`. Press the hotbar key; the enemy path turns **red**
   (`RedGrid` before/after diff = path). Candidates come from `PlaceCands()` (ground) or
   `HillCands()` (hill units: only inside the **green** zones shown while a hill unit is held,
