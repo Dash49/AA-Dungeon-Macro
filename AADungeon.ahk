@@ -42,6 +42,19 @@ global TRACK := [["Gems", "💎", "i)\bgems?\b"], ["Stat Cube", "🧊", "i)^(?!.
     ["Perfect Stat Cube", "✨", "i)perfect\s*stat\s*cube"], ["Star Remnant", "🌟", "i)star\s*remnant"],
     ["Cursed Token", "🧿", "i)cursed\s*token"], ["Snow Reaper", "❄️", "i)snow\s*reaper"],
     ["April Coins", "🪙", "i)april\s*coin"]]
+; room curse icons above the CURSE word on the room board: share of 9 colour groups (CurseBin)
+; in each quarter of the icon (top-left, top-right, bottom-left, bottom-right), made from 101
+; icons in route shots (all read right). Unknown = the "?" icon.
+global CURSE_ICONS := [
+    ["Explosion", "0.47 0 0.04 0 0 0.21 0 0.19 0.1 0.57 0 0.04 0 0 0.08 0.02 0.19 0.09 0.37 0 0.16 0 0 0.18 0.03 0.11 0.16 0.29 0 0.21 0 0 0.46 0.03 0.01 0"],
+    ["Flight", "0.63 0 0 0 0 0.11 0 0.12 0.13 0.55 0 0 0 0 0.14 0 0.17 0.14 0.23 0 0 0 0 0.16 0 0.47 0.14 0.14 0 0 0 0 0.15 0 0.58 0.13"],
+    ["Health", "0.2 0 0 0 0 0.1 0.26 0.31 0.13 0.19 0 0 0 0 0.18 0.12 0.4 0.12 0.21 0 0 0 0 0.16 0.11 0.41 0.11 0.22 0 0 0 0 0.09 0.05 0.6 0.05"],
+    ["Money", "0.37 0 0.15 0 0 0.38 0 0 0.1 0.44 0 0.14 0 0 0.34 0 0.01 0.07 0.13 0 0.16 0 0 0.62 0 0.04 0.06 0.2 0 0.18 0 0 0.5 0 0 0.11"],
+    ["Regen", "0.46 0.12 0.03 0 0 0.27 0 0.02 0.11 0.45 0.12 0.03 0 0 0.27 0.01 0.01 0.11 0.33 0.09 0.06 0 0 0.39 0.01 0.05 0.07 0.35 0.11 0.05 0 0 0.39 0 0.02 0.08"],
+    ["Shielding", "0.55 0.04 0.12 0.16 0.01 0.01 0 0.03 0.09 0.49 0.04 0.06 0.19 0.03 0 0 0.06 0.13 0.44 0.03 0.06 0.32 0.05 0.02 0 0.03 0.05 0.37 0 0.01 0.34 0.09 0.03 0 0.07 0.09"],
+    ["Shopping", "0.81 0 0 0 0 0.08 0 0.04 0.06 0.66 0 0 0 0 0.08 0 0.13 0.13 0.05 0 0 0 0 0.74 0.01 0.12 0.08 0.05 0 0 0 0 0.58 0 0.19 0.18"],
+    ["Wind", "0.41 0 0.28 0 0 0.2 0 0.02 0.09 0.2 0 0.38 0 0 0.24 0 0.04 0.14 0.3 0 0.35 0 0 0.26 0 0.02 0.08 0.26 0 0.52 0 0 0.15 0 0.02 0.06"],
+    ["Unknown", "0.55 0 0.05 0 0 0 0.01 0.22 0.16 0.56 0 0 0 0 0.01 0.03 0.21 0.19 0.65 0 0.01 0 0 0.01 0.06 0.15 0.12 0.65 0 0 0 0 0.02 0 0.19 0.14"]]
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
@@ -122,7 +135,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "",
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -966,9 +979,93 @@ CursePts(depth) {
     return CFG["Curse"]
 }
 
+; CurseAvoid (settings, e.g. "Health,Wind"): room curses never entered while another room can be.
+; t = a label "Curse(Wind)" or a curse name as read on the room card ("Monee" = Money: first 3 letters)
+CurseAvoided(t) {
+    if RegExMatch(t, "i)^Curse\((\w+)\)$", &m)
+        t := m[1]
+    k := SubStr(StrLower(RegExReplace(t, "[^A-Za-z]")), 1, 3)
+    if (StrLen(k) < 3 || k = "cur")                ; plain "Curse": icon not read
+        return false
+    for cw in StrSplit(CFG.Get("CurseAvoid", ""), [",", "|", " "])
+        if (StrLen(cw := Trim(cw)) >= 3 && SubStr(StrLower(cw), 1, 3) = k)
+            return true
+    return false
+}
+; colour group of one pixel (the same rules made CURSE_ICONS)
+CurseBin(c) {
+    r := (c >> 16) & 0xFF, g := (c >> 8) & 0xFF, b := c & 0xFF
+    mx := Max(r, g, b), mn := Min(r, g, b)
+    if (mx < 70)
+        return 0                                   ; dark / outline
+    if (mn > 190)
+        return 1                                   ; white
+    if (b >= 150 && r >= 110 && g >= 110)
+        return 2                                   ; pale blue (wind)
+    if (r > g && g > b && r - b >= 40 && r >= 90)
+        return 3                                   ; brown (wood)
+    if (mx - mn < 30)
+        return 4                                   ; grey
+    if (b > r + 25 && b >= 100)
+        return 5                                   ; blue
+    if (r >= 170 && b >= 140)
+        return 6                                   ; bright pink
+    if (r >= 70 || b >= 90)
+        return 7                                   ; purple
+    return 8
+}
+; the curse a CURSE word shows: its icon sits right above the word (wx, wy = the word's screen
+; centre, big = the row of rooms you can enter, else the small next-room row). Snap() first.
+; -> "Wind", "Unknown" (the ? icon) ... or "" when no icon fits
+CurseIcon(wx, wy, big) {
+    static tpl := 0
+    if !IsObject(tpl) {
+        tpl := []
+        for ci in CURSE_ICONS {
+            v := []
+            for sv in StrSplit(ci[2], " ")
+                v.Push(sv + 0)
+            tpl.Push({name: ci[1], v: v})
+        }
+    }
+    u := WIN.u, sz := (big ? 60 : 30) * u, off := (big ? 6 : 4) * u
+    best := 99, bestN := ""
+    dy := -8
+    while (dy <= 8) {                              ; the OCR word box can sit a bit high or low
+        x0 := wx - sz / 2, y0 := wy - off - sz + dy * u
+        f := []
+        Loop 36
+            f.Push(0)
+        Loop 10 {
+            j := A_Index - 1
+            Loop 10 {
+                i := A_Index - 1
+                q := (j >= 5 ? 2 : 0) + (i >= 5 ? 1 : 0)
+                k := q * 9 + CurseBin(Color(x0 + (i + 0.5) * sz / 10, y0 + (j + 0.5) * sz / 10)) + 1
+                f[k] += 1
+            }
+        }
+        for tp in tpl {
+            d := 0
+            Loop 36
+                d += Abs(f[A_Index] / 25 - tp.v[A_Index])
+            if (d < best)
+                best := d, bestN := tp.name
+        }
+        dy += 2
+    }
+    return (best < 3) ? bestN : ""
+}
+; label of a CURSE word with its icon: "Curse(Wind)", or "Curse" when the icon was not read
+CurseLabel(wd, big) {
+    n := CurseIcon(wd.sx, wd.sy, big)
+    return (n != "") ? "Curse(" n ")" : "Curse"
+}
+
 LabelPts(t, coins, depth) {
+    if (SubStr(t, 1, 5) = "Curse")                 ; "Curse" or "Curse(Wind)" (icon read)
+        return CursePts(depth) + (CurseAvoided(t) ? -1000 : 0)
     switch t {
-        case "Curse": return CursePts(depth)
         case "Shop":
             if (coins > CFG["ShopRichCoins"])
                 return CFG["ShopRich"]
@@ -1078,11 +1175,17 @@ ReadRoute() {
     big := [], small := []
     for wd in Words(bg)
         if (t := LabelType(wd.t))
-            big.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960})
+            big.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960, sx: wd.x, sy: wd.y})
     for wd in Words(sm)
         if (t := LabelType(wd.t))
-            small.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960})
+            small.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960, sx: wd.x, sy: wd.y})
     Snap()
+    for b in big                                   ; which curse: the icon above the word
+        if (b.t = "Curse")
+            b.t := CurseLabel(b, true)
+    for b in small
+        if (b.t = "Curse")
+            b.t := CurseLabel(b, false)
     ; which tile layout: 3 tiles (624/959/1295), 2 (792/1127) or 1 (959)
     layouts := [[624, 959, 1295], [792, 1127], [959]]
     best := 1, bestScore := -999999                ; scores can all be negative (tiles not seen)
@@ -1119,7 +1222,7 @@ ReadRoute() {
         g := OcrRef(x - 172, 365, x + 172, 485, 4)
         for wd in Words(g)
             if (t := LabelType(wd.t))
-                grp.Push({t: t, x: (wd.x - PX(960)) / WIN.u + 960})
+                grp.Push({t: (t = "Curse") ? CurseLabel({sx: wd.x, sy: wd.y}, false) : t, x: (wd.x - PX(960)) / WIN.u + 960})
         if !grp.Length {                           ; fall back to the whole-row read
             for s in small {
                 nearest := 0, dmin := 99999
@@ -1237,8 +1340,14 @@ DoRoute() {
         Out("  " bl)
     }
     ShotRoute(r.depth, "Depth " r.depth "/" r.max "  coins " r.coins "  " txt, bl)   ; ShotScreens=1 only
+    skipped := []                                  ; cards showing a CurseAvoid curse
     for t in list {
-        if EnterTile(t) {
+        e := EnterTile(t, true)
+        if (e = -1) {
+            skipped.Push(t)
+            continue
+        }
+        if e {
             Out("Entered " (t.labels.Length ? Join(t.labels) : "Normal") " room")
             RS.camDone := false
             if (r.depth >= r.max)
@@ -1247,16 +1356,30 @@ DoRoute() {
         }
         Out("Could not enter that tile - trying the next one")
     }
+    for t in skipped {                             ; no other way: an avoided curse after all
+        Out("  only avoided curses left - entering anyway")
+        if (EnterTile(t) = true) {
+            Out("Entered " (t.labels.Length ? Join(t.labels) : "Normal") " room")
+            RS.camDone := false
+            return
+        }
+    }
     Wait(1000)
 }
 
-; click a tile, then the green Enter button of its card
-EnterTile(t) {
+; click a tile, then the green Enter button of its card.
+; avoid: a card that says "Curse of <CurseAvoid curse>" is closed, not entered -> -1
+EnterTile(t, avoid := false) {
     Loop 2 {
         ClickRef(t.x, 643)
         Wait(800)
         if FindEnter(t.x, &ex, &ey) {
-            RoomMap()                              ; the card names the map (StageWalk)
+            card := RoomMap()                      ; the card names the map (StageWalk)
+            if (avoid && RegExMatch(card, "i)Curse\s*of\s*([A-Za-z]+)", &m) && CurseAvoided(m[1])) {
+                Out("  room card: Curse of " m[1] " is on the avoid list (CurseAvoid) - not entering")
+                CloseRoomCard(ex, ey)
+                return -1
+            }
             ClickAt(ex, ey)
             Wait(400)
             Loop 10 {
@@ -1270,11 +1393,33 @@ EnterTile(t) {
     return false
 }
 
-; the room card shows the map name under "Dungeon Room" (e.g. Snowy Town)
+; the red X at the top right of a room card (Enter button at ex, ey): close the card
+CloseRoomCard(ex, ey) {
+    Snap()
+    cx := ex + 152 * WIN.u, cy := ey - 441 * WIN.u, n := 0, sx := 0, sy := 0
+    yy := cy - 30 * WIN.u
+    while (yy <= cy + 30 * WIN.u) {
+        xx := cx - 30 * WIN.u
+        while (xx <= cx + 30 * WIN.u) {
+            c := RGB(Color(xx, yy))
+            if (c.r > 170 && c.g < 70 && c.b < 70)
+                n++, sx += xx, sy += yy
+            xx += 4
+        }
+        yy += 4
+    }
+    if (n >= 8) {
+        ClickAt(sx / n, sy / n)
+        Wait(600)
+    } else
+        Out("  room card: close button not found")
+}
+
+; the room card shows the map name under "Dungeon Room" (e.g. Snowy Town) -> the card text
 RoomMap() {
     r := OcrAll()
     if !IsObject(r)
-        return
+        return ""
     name := "", prev := false
     for ln in Lines(r) {
         if prev {
@@ -1288,6 +1433,7 @@ RoomMap() {
     ShotUi("room")                                 ; the room card that is about to be entered
     RS.stage := "", RS.stageWalked := false        ; this card decides it
     StageCheck(r.t)
+    return r.t
 }
 ; map names compared as letters only, I = l (the card font mixes them up)
 MapKey(t) => StrLower(RegExReplace(StrReplace(t, "I", "l", true), "[^A-Za-z]"))

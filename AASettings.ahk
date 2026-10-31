@@ -36,7 +36,7 @@ global DEF := Map(
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-    "StuckRejoin", 10, "PrivateServer", "",
+    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -171,6 +171,11 @@ global SPEED_TH := ["ช้า ปลอดภัย (75%)", "ปกติ (100%
 ; ---- update: only the program files are replaced, never settings.ini / plan.txt
 global REPO_RAW := "https://raw.githubusercontent.com/Dash49/AA-Dungeon-Macro/main/"
 global UPDATE_FILES := ["AADungeon.ahk", "AASettings.ahk", "AAWatch.ahk", "Lib/OCR.ahk"]
+; room curses (icons on the room board) for CurseAvoid, icons in Images\curses
+global CURSE_NAMES := ["Explosion", "Flight", "Health", "Money", "Regen", "Shielding", "Shopping", "Wind", "Unknown"]
+global CURSE_TH := ["ชมพูลายเฉียง", "หมวกแม่มดม่วง", "หัวใจม่วงเรียบ", "เหรียญน้ำเงิน", "หัวใจขอบขาว มี +",
+    "โล่ไม้", "ตัวน้ำเงินมีหนาม", "พายุหมุนสีฟ้า", "เครื่องหมาย ? (ไม่รู้ว่าอะไร)"]
+global CurseAvoidVal := ""
 global KIND_TH := ["วางยูนิต", "อัปเกรด", "กดสกิล", "เปิดสกิล Auto", "รอ (วินาที)", "รอจนถึงเวฟ"]
 
 global Steps := []          ; ขั้นตอนของแผน
@@ -296,6 +301,8 @@ BuildGui() {
     G.AddGroupBox("x25 y" y " w750 h120", "ห้อง Curse")
     y += 28
     AddNum("Curse", "Curse (ช่วงแรก)", 40, y)
+    C.cavoid := G.AddButton("x400 y" (y - 2) " w360", CurseBtnText())
+    C.cavoid.OnEvent("Click", CurseAvoidPick)
     y += 34
     AddNum("CurseMid", "Curse ช่วงกลาง", 40, y), AddNum("CurseMidDepth", "ช่วงกลางเริ่มที่ Depth", 400, y)
     y += 34
@@ -474,6 +481,69 @@ BuildGui() {
     G.AddButton("x530 y645 w160 h35", "🔄 อัปเดตมาโคร").OnEvent("Click", (*) => UpdateMacro())
     C.status := G.AddText("x12 y690 w776 cGreen", "")
     UpdateBuilder()
+}
+
+; ---- CurseAvoid: room curses never entered while another room can be
+CurseIn(nm) {
+    for cw in StrSplit(CurseAvoidVal, [",", "|", " "])
+        if (Trim(cw) = nm)
+            return true
+    return false
+}
+CurseBtnText() {
+    n := 0
+    for nm in CURSE_NAMES
+        n += CurseIn(nm) ? 1 : 0
+    return "🚫 คำสาปที่ไม่เข้า: " (n ? n " แบบ" : "ไม่มี") "  (กดเลือก)"
+}
+; a small window: the 9 curse icons, a checkbox each
+CurseAvoidPick(*) {
+    dir := A_ScriptDir "\Images\curses"
+    try {                                          ; the icons come with the ZIP; F8 > Update does not bring them
+        DirCreate(dir)
+        base := ""
+        for nm in CURSE_NAMES {
+            f := dir "\" nm ".png"
+            if FileExist(f)
+                continue
+            if (base = "")
+                base := LatestRaw()
+            Download(base "Images/curses/" nm ".png", f)
+            fo := FileOpen(f, "r"), sig := fo.ReadUInt(), fo.Close()
+            if (sig != 0x474E5089)                 ; not a PNG (an error page)
+                FileDelete(f)
+        }
+    }
+    W := Gui("+Owner" G.Hwnd " +ToolWindow", "คำสาปที่ไม่เข้า")
+    W.SetFont("s10", "Leelawadee UI")
+    W.AddText("x15 y10 w570", "ติ๊กคำสาปที่ไม่อยากเข้า มาโครจะดูไอคอนบนห้อง Curse แล้วเลือกทางอื่นแทน`n"
+        . "(ถ้าไม่มีทางอื่นเลยจะเข้าไปตามปกติ  ใช้กับห้องบนกระดาน ไม่ใช่ Shrine)")
+    cbs := []
+    for i, nm in CURSE_NAMES {
+        x := 15 + Mod(i - 1, 3) * 195, y := 62 + ((i - 1) // 3) * 70
+        if FileExist(dir "\" nm ".png")
+            try W.AddPicture("x" x " y" y " w52 h52", dir "\" nm ".png")
+        cb := W.AddCheckbox("x" (x + 58) " y" (y + 6) " w135", nm)
+        cb.Value := CurseIn(nm) ? 1 : 0
+        cbs.Push(cb)
+        W.AddText("x" (x + 58) " y" (y + 28) " w135 cGray", CURSE_TH[i])
+    }
+    okb := W.AddButton("x200 y280 w90 Default", "ตกลง")
+    okb.OnEvent("Click", (*) => CurseAvoidOk(W, cbs))
+    nob := W.AddButton("x300 y280 w90", "ยกเลิก")
+    nob.OnEvent("Click", (*) => W.Destroy())
+    W.Show("w600 h320")
+}
+CurseAvoidOk(W, cbs) {
+    global CurseAvoidVal
+    v := ""
+    for i, cb in cbs
+        if cb.Value
+            v .= (v != "" ? "," : "") CURSE_NAMES[i]
+    CurseAvoidVal := v
+    C.cavoid.Text := CurseBtnText()
+    MarkDirty()
+    W.Destroy()
 }
 
 AddNum(key, label, x, y, tip := "", tipW := 100) {
@@ -1272,7 +1342,7 @@ MapToStage() {
 
 ; ============================================================ settings
 LoadSettings() {
-    global Items, Filling, Stages
+    global Items, Filling, Stages, CurseAvoidVal
     Filling := true
     for k, v in DEF {
         val := IniRead(INI, "Settings", k, v)
@@ -1293,6 +1363,10 @@ LoadSettings() {
         }
         else if (k = "ShrineAvoid")
             C.avoid.Value := val
+        else if (k = "CurseAvoid") {
+            CurseAvoidVal := Trim(val)
+            C.cavoid.Text := CurseBtnText()
+        }
         else if (k = "HillRun")
             C.run.Value := (val + 0) ? 1 : 0
         else if (k = "StageWalk")
@@ -1348,6 +1422,7 @@ SaveAll(restart) {
         IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
         IniWrite(PRESETS[C.preset.Value].key, INI, "Settings", "Preset")
         IniWrite(Trim(StrReplace(C.avoid.Value, "|", ",")), INI, "Settings", "ShrineAvoid")
+        IniWrite(CurseAvoidVal, INI, "Settings", "CurseAvoid")
         IniWrite(C.finish.Value = 2 ? "stop" : "again", INI, "Settings", "OnFinish")
         IniWrite(SPEEDS[C.speed.Value ? C.speed.Value : 2], INI, "Settings", "Speed")
         IniWrite(UPMODES[C.upmode.Value ? C.upmode.Value : 1], INI, "Settings", "UpgradeMode")
