@@ -36,7 +36,7 @@ global DEF := Map(
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "",
+    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -450,6 +450,9 @@ BuildGui() {
     G.AddButton("x570 y360 w205", "← ใช้ชื่อนี้").OnEvent("Click", (*) => MapToStage())
     G.AddButton("x570 y395 w205", "รีเฟรชรายการที่เห็น").OnEvent("Click", (*) => LoadMapsSeen())
     G.AddText("x570 y435 w205 cGray", "W = เดินหน้า  S = ถอยหลัง`nA = ซ้าย  D = ขวา`n(ตามมุมกล้องตอนเริ่มด่าน)`n`nกด 'บันทึก' ด้านล่างเมื่อแก้เสร็จ")
+    C.mroute := G.AddCheckbox("x570 y540 w205", "เดินแบบ Capy (16 ด่าน)")
+    C.mroute.OnEvent("Click", (*) => MarkDirty())
+    G.AddText("x570 y563 w205 h60 cGray", "กล้องมองลง > วาร์ปกลับจุดเกิด > เดินตามเส้นทางที่อัดไว้ ด่านที่มีเส้นทางใช้แบบนี้แทนรายการซ้าย")
 
     ; ------------------------------------- แท็บ 6: Discord / หยุดเอง
     tab.UseTab(6)
@@ -1369,6 +1372,8 @@ LoadSettings() {
         }
         else if (k = "HillRun")
             C.run.Value := (val + 0) ? 1 : 0
+        else if (k = "MapRoutes")
+            C.mroute.Value := (val + 0) ? 1 : 0
         else if (k = "StageWalk")
             Stages := ParseStages(val)
         else if (k = "OnFinish")
@@ -1418,6 +1423,7 @@ SaveAll(restart) {
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
         IniWrite(C.run.Value ? 1 : 0, INI, "Settings", "HillRun")
+        IniWrite(C.mroute.Value ? 1 : 0, INI, "Settings", "MapRoutes")
         IniWrite(StagesString(), INI, "Settings", "StageWalk")
         IniWrite(SHRINE_KEYS[C.shrine.Value], INI, "Settings", "ShrineMode")
         IniWrite(PRESETS[C.preset.Value].key, INI, "Settings", "Preset")

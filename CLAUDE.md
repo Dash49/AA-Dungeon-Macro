@@ -35,6 +35,10 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   and compares with `CURSE_ICONS` (made offline from 101 icons in route shots) -> label `Curse(Wind)`. `CurseAvoid`
   (settings) curses get -1000; `EnterTile(t, true)` also reads "Curse of X" on the room card and closes it (`CloseRoomCard`)
   if avoided; only avoided rooms left -> entered anyway. Icons for the F8 picker: `Images/curses/*.png` (the picker downloads missing ones).
+- Before the start (`StartMoves`, vote screen or first look at a match): maps with a route in `WALKS` (Capy's recorded
+  key timings, `MapRoutes`=1) go `MapRouteGo`: `CameraSetup` -> `SpawnReset` (gear bottom left, OCR "Teleport to Spawn",
+  wheel-scroll the open panel, red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
+  Other maps: `StageWalk` then `CameraSetup` (old way).
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.
   Plan syntax: `place 1 x3 [random|near|far|group|spread|cover|center|at X,Y]`,
   `upgrade 1,2 [max|to N|+N] [even|one] [until wave N]`, `ability 3 x2`, `auto 6`, `wait 5`, `wave 7`.

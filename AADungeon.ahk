@@ -55,6 +55,26 @@ global CURSE_ICONS := [
     ["Shopping", "0.81 0 0 0 0 0.08 0 0.04 0.06 0.66 0 0 0 0 0.08 0 0.13 0.13 0.05 0 0 0 0 0.74 0.01 0.12 0.08 0.05 0 0 0 0 0.58 0 0.19 0.18"],
     ["Wind", "0.41 0 0.28 0 0 0.2 0 0.02 0.09 0.2 0 0.38 0 0 0.24 0 0.04 0.14 0.3 0 0.35 0 0 0.26 0 0.02 0.08 0.26 0 0.52 0 0 0.15 0 0.02 0.06"],
     ["Unknown", "0.55 0 0.05 0 0 0 0.01 0.22 0.16 0.56 0 0 0 0 0.01 0.03 0.21 0.19 0.65 0 0.01 0 0 0.01 0.06 0.15 0.12 0.65 0 0 0 0 0.02 0 0.19 0.14"]]
+; Walk to a good spot before the start, the way Capy's AA macro does it (routes from Capy's macro,
+; recorded at walking speed): camera top-down, "Teleport to Spawn" in the game settings, then these
+; key timings: "<ms><key><+ down|- up>" from the start. MapRoutes=0 in settings turns it off.
+global WALKS := Map(
+    "Spirit Town", "888s+ 3488s- 3672a+ 6001a-",
+    "Ant Kingdom", "808s+ 1256s- 1576a+ 2543a- 2728s+ 3304a+ 4544a- 4792a+ 5416a- 5616a+ 5905a- 6336a+ 7232s- 9144w+ 9640a- 10152a+ 10712w- 11177w+ 11256a- 12609w-",
+    "Fabled Kingdom", "628s+ 1157s- 1424a+ 2384a- 2612s+ 2768s- 2952a+ 4344a- 4520s+ 7568s- 7912d+ 8192d- 8304s+ 8544s- 8672d+ 9816d- 9960s+ 11233s- 11384d+ 12016d-",
+    "Fiend City", "706s+ 993s- 1681a+ 5756a- 5977s+ 8593s- 9289d+ 10425d-",
+    "Haunted Academy", "1190d+ 6054d-",
+    "Mountain Temple", "952s+ 1736s- 1960a+ 3536a-",
+    "Sand Village", "1089s+ 1633s- 2257d+ 4217s+ 5361d- 6864s- 7329a+ 7625s+ 8073s- 8841s+ 9089s- 9793a- 10095s+ 10833s-",
+    "Snowy Kingdom", "1259w+ 1763d+ 2403d- 3443d+ 4803w- 5907w+ 6819d- 7859w- 8203a+ 8555a-",
+    "Space Center", "651w+ 1200w- 1408a+ 4593a- 4928s+ 8008s-",
+    "Spirit World", "1178w+ 2329w- 3421d+ 4390d- 5112w+ 6637w- 7313d+ 11095d- 11826w+ 13495w-",
+    "Magic Town", "625d+ 3267d- 3688s+ 4849s- 5848d+ 9601d-",
+    "Magic Hills", "488a+ 2408w+ 3809w- 5009s+ 5833s- 6272s+ 6670s- 7121s+ 8425s- 10408s+ 10978a- 11800a+ 12208s- 14112w+ 14280w- 14632s+ 14800s- 15112s+ 15296s- 15825s+ 16720s- 17929w+ 19520w- 20032w+ 20760w- 21137w+ 22425a- 22464w-",
+    "Snowy Town", "962d+ 3784d- 4104w+ 5608w-",
+    "Nightmare Train", "1150a+ 2125LShift+ 4052LShift- 4717w+ 7477w- 8040s+ 9871a- 10306a+ 11164a- 11695a+ 12883s- 13026a-",
+    "Future City", "828w+ 4111w- 4234d+ 4477d- 4554w+ 6041w-",
+    "Strange Town", "940d+ 2597s+ 2606d- 3138s-")
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
@@ -135,7 +155,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "",
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -816,8 +836,7 @@ CameraSetup(way := 1) {
 DoVote(r) {
     static tries := 0, lastAt := 0
     if !RS.camVote {                               ; camera first, then start the game
-        StageWalk()                                ; e.g. Magic Hill: move first
-        CameraSetup()
+        StartMoves(true)                           ; camera + walk (MapRoute / StageWalk)
         RS.camVote := true
         HillScan()                                 ; where the hills are (before the start)
         return
@@ -1428,8 +1447,10 @@ RoomMap() {
         }
         prev := RegExMatch(ln.t, "i)Dungeon\s*Room")
     }
-    if (name != "")
+    if (name != "") {
         Out("  room map: " KnownMap(name))
+        RS.roomMap := name, RS.roomAt := A_TickCount   ; (MapRoute: the room about to be entered)
+    }
     ShotUi("room")                                 ; the room card that is about to be entered
     RS.stage := "", RS.stageWalked := false        ; this card decides it
     StageCheck(r.t)
@@ -1446,10 +1467,13 @@ LoadingMap(r) {
             name := Trim(RegExReplace(ln.t, "\s+", " "))
             if RegExMatch(name, "i)^(Dungeon|Depth|Easy|Normal|Hard|Insane|Nightmare|Travel)")
                 continue                           ; not the map name - the next line
-            if (name != last && RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$")) {
-                last := name, RS.mapName := name
-                Out("  map: " name)
-                MapSeen(name)
+            if RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$") {
+                RS.mapName := name, RS.mapAt := A_TickCount   ; (MapRoute: this match's map)
+                if (name != last) {
+                    last := name
+                    Out("  map: " name)
+                    MapSeen(name)
+                }
             }
             return
         }
@@ -2080,9 +2104,10 @@ PlayMatch() {
     ReadHotbarCosts()
     if (RS.stage = "" && !RS.camVote && ReadWave() <= 1) ; no vote screen seen: look for the name here
         StageCheck(OcrAll().t)
-    StageWalk()                                     ; not done on the vote screen
     if !RS.camVote                                  ; camera was not set on the vote screen
-        CameraSetup()
+        StartMoves(false)                           ; camera + walk (MapRoute / StageWalk)
+    else
+        StageWalk()                                 ; not done on the vote screen
     RS.camVote := false                             ; next match sets it again
     if !IsObject(RS.hillScan)                       ; hills not checked on the vote screen
         HillScan()
@@ -2636,6 +2661,142 @@ Walk(k, sec, run := -1) {
     if run
         Send("{LShift up}")
     Sleep(250)
+}
+; before the start: the top-down camera and the walk to the map's good spot. A map with a
+; route in WALKS goes Capy's way (MapRouteGo), else the StageWalk list (old way: walk, then camera)
+StartMoves(onVote) {
+    if MapRouteGo(onVote)
+        return
+    StageWalk()
+    CameraSetup()
+}
+; the map of this match: the room card just entered, or the loading screen (5 min) -> WALKS name
+MapRoute() {
+    cands := []
+    if RS.HasOwnProp("roomMap")
+        cands.Push([RS.roomAt, RS.roomMap])
+    if (RS.HasOwnProp("mapName") && RS.HasOwnProp("mapAt"))
+        cands.InsertAt((cands.Length && cands[1][1] > RS.mapAt) ? 2 : 1, [RS.mapAt, RS.mapName])   ; newest first
+    for cand in cands {
+        if (cand[2] = "" || A_TickCount - cand[1] > 300000)
+            continue
+        a := MapKey(cand[2])
+        if (StrLen(a) < 5)
+            continue
+        for nm, rt in WALKS {
+            b := MapKey(nm)                        ; "Magic Hill" on screen = "Magic Hills"
+            if (InStr(a, b) || InStr(b, a) || 1 - NameDist(a, b) / Max(StrLen(a), StrLen(b)) >= 0.8)
+                return nm
+        }
+    }
+    return ""
+}
+; Capy's way: camera, back to the spawn point, then the recorded keys of WALKS
+MapRouteGo(onVote) {
+    if (!(CFG.Get("MapRoutes", 1) + 0) || RS.stageWalked)
+        return false
+    nm := MapRoute()
+    if (nm = "")
+        return false
+    if (!onVote && ReadWave() > 1) {               ; started in the middle of a match: stay
+        Out("  " nm ": match already running - no walk")
+        RS.stageWalked := true
+        return false
+    }
+    RS.stageWalked := true                         ; StageWalk is not used on top of it
+    Out("Map route: " nm " (camera, teleport to spawn, walk)")
+    CameraSetup()
+    if !SpawnReset()
+        Out("  teleport to spawn did not work - walking from here")
+    PlayRoute(nm, WALKS[nm])
+    Wait(300)
+    return true
+}
+; game settings (gear, bottom left) > "Teleport to Spawn" (scroll down to it), then close
+SpawnReset() {
+    Focus()
+    open := false
+    Loop 2 {                                       ; the gear, then check the Settings title
+        ClickRef(45, 1050, "l", "b")
+        Wait(900)
+        t := OcrRef(600, 195, 1010, 300, 2)
+        if (IsObject(t) && InStr(t.t, "Settings")) {
+            open := true
+            break
+        }
+    }
+    if !open {
+        Out("  spawn: settings did not open")
+        return false
+    }
+    done := false
+    Loop 12 {
+        for ln in Lines(OcrRef(620, 240, 1320, 800, 2)) {
+            lt := StrLower(RegExReplace(ln.t, "[^A-Za-z]"))
+            if (InStr(lt, "teleport") && InStr(lt, "spawn") && !InStr(lt, "lobby")) {
+                ClickAt(PX(1189), ln.y + 10 * WIN.u)   ; the button at the right end of the row
+                Out("  spawn: Teleport to Spawn clicked")
+                done := true
+                break
+            }
+        }
+        if done
+            break
+        MouseMove(Round(PX(960)), Round(PY(520)))  ; over the panel (it is open: the wheel scrolls it)
+        Sleep 60
+        Click "WheelDown"
+        Sleep 350
+    }
+    if !done
+        Out("  spawn: 'Teleport to Spawn' not found in the settings")
+    Wait(1000)
+    Loop 2 {                                       ; red X of the settings window
+        Snap()
+        n := 0, sx := 0, sy := 0
+        yy := 150
+        while (yy <= 380) {
+            xx := 1200
+            while (xx <= 1380) {
+                c := RGB(Color(PX(xx), PY(yy)))
+                if (c.r > 170 && c.g < 80 && c.b < 80)
+                    n++, sx += PX(xx), sy += PY(yy)
+                xx += 6
+            }
+            yy += 6
+        }
+        if (n >= 10)
+            ClickAt(sx / n, sy / n)
+        else
+            ClickRef(1305, 233)
+        Wait(700)
+        t := OcrRef(600, 195, 1010, 300, 2)
+        if !(IsObject(t) && InStr(t.t, "Settings"))
+            break
+    }
+    Wait(800)
+    return done
+}
+; play "<ms><key><+|->" key timings (WALKS); stops (keys up) if Roblox loses the focus
+PlayRoute(nm, spec) {
+    Focus()
+    held := Map(), t0 := A_TickCount, ok := true
+    for ev in StrSplit(Trim(spec), " ") {
+        if !RegExMatch(ev, "^(\d+)(\w+?)([+-])$", &m)
+            continue
+        while (ok && A_TickCount - t0 < m[1] + 0) {
+            if (WIN.id && !WinActive(WIN.id))
+                ok := false
+            Sleep 5
+        }
+        if !ok
+            break
+        Send("{" m[2] (m[3] = "+" ? " down}" : " up}"))
+        held[m[2]] := (m[3] = "+")
+    }
+    for k, dn in held
+        if dn
+            Send("{" k " up}")
+    Out("  " nm ": walk " (ok ? "done (" Round((A_TickCount - t0) / 1000, 1) " s)" : "stopped - Roblox lost the focus"))
 }
 ; Stage name, read on the loading / vote screens. StageWalk lists stages
 ; where the start spot is too far from the path: "Magic Hill=a 3 jump|Other=d 2, w 1"
