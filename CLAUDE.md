@@ -37,7 +37,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   if avoided; only avoided rooms left -> entered anyway. Icons for the F8 picker: `Images/curses/*.png` (the picker downloads missing ones).
 - Before the start (`StartMoves`, vote screen or first look at a match): maps with a route in `WALKS` (Capy's recorded
   key timings, `MapRoutes`=1) go `MapRouteGo`: `CapyCamera` (his Zoomtech moves; `RS.capyCam` -> CamZoomNow 20,
-  CameraSetup redoes it) -> `SpawnReset` (gear, Capy's 6 notches at his spot, `SpawnRow` OCR check, never a blind click:
+  CameraSetup redoes it) -> `SpawnReset` (gear, 10 notches at Capy's spot - measured live at 1080p, Capy's 800x600 uses 6; `SpawnRow` OCR check, never a blind click:
   Return to Lobby is the next row; red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
   Other maps: `StageWalk` then `CameraSetup` (old way).
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.

@@ -2715,10 +2715,10 @@ MapRouteGo(onVote) {
     Wait(300)
     return true
 }
-; Capy's spawn reset: game settings (gear, bottom left), 6 wheel notches down at his spot, then
-; "Teleport to Spawn" and the red X. His 800x600 spots are scaled to this window; the row is also
-; checked by OCR (the window is bigger, the scroll may stop elsewhere) and never clicked blind:
-; "Return to Lobby" is the row next to it.
+; Capy's spawn reset: game settings (gear, bottom left), wheel notches down at his spot, then
+; "Teleport back to Spawn" and the red X. Capy scrolls 6 notches at 800x600; measured live at
+; 1920x1080 (2026-10-31): 10 notches put the row in the middle (button at 1192,612; 9 = row at the
+; bottom edge). The row is checked by OCR and never clicked blind: "Return to Lobby" is right under it.
 SpawnReset() {
     Focus()
     open := false
@@ -2734,18 +2734,18 @@ SpawnReset() {
         Out("  spawn: settings did not open")
         return false
     }
-    Loop 6                                         ; Capy: 6 notches, one every 350 ms, at (460,350)
+    Loop 10                                        ; one every 350 ms, at Capy's (460,350)
         SettingsWheel("WheelDown")
     done := false
     Loop 22 {                                      ; not on screen yet: further down, then back up
         if (y := SpawnRow()) {
-            cy := (Abs(y - PY(589)) < 25 * WIN.u) ? PY(589) : y   ; Capy's button spot (522,327)
-            ClickAt(PX(1180), cy)
-            Out("  spawn: Teleport to Spawn clicked" (cy = y ? " (row found " Round((y - PY(589)) / WIN.u) " px from Capy's spot)" : ""))
+            cy := (Abs(y - PY(612)) < 25 * WIN.u) ? PY(612) : y   ; the measured button spot
+            ClickAt(PX(1192), cy)
+            Out("  spawn: Teleport to Spawn clicked" (cy = y ? " (row found " Round((y - PY(612)) / WIN.u) " px from the usual spot)" : ""))
             done := true
             break
         }
-        SettingsWheel(A_Index <= 8 ? "WheelDown" : "WheelUp")
+        SettingsWheel(A_Index <= 6 ? "WheelDown" : "WheelUp")
     }
     if !done
         Out("  spawn: 'Teleport to Spawn' not found in the settings - not clicking blind")
@@ -2767,7 +2767,7 @@ SpawnReset() {
         if (n >= 10)
             ClickAt(sx / n, sy / n)
         else
-            ClickRef(1291, 272)
+            ClickRef(1305, 233)                    ; (measured; Capy: 584,151)
         Sleep 700
         if !SettingsOpen()
             break
@@ -2781,7 +2781,9 @@ SettingsOpen() {
 }
 SettingsWheel(dir) {
     MouseMove(Round(PX(1068)), Round(PY(630)))     ; Capy's (460,350): inside the open panel
-    Sleep 50
+    Sleep 40
+    MouseMove(1, 0, , "R")                         ; Roblox ignores the wheel without a hover
+    Sleep 40
     Click dir
     Sleep 350
 }
