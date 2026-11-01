@@ -3133,6 +3133,26 @@ SpawnReset() {
     return done
 }
 SettingsOpen() {
+    ; colours first (2026-11-02: the title OCR missed the open window again and again):
+    ; the red X at the top right (measured 1302,228) + the near-black panel
+    Snap()
+    red := 0, yy := 195
+    while (yy <= 260) {
+        xx := 1260
+        while (xx <= 1345) {
+            c := RGB(Color(PX(xx), PY(yy)))
+            red += (c.r > 170 && c.g < 80 && c.b < 80)
+            xx += 6
+        }
+        yy += 6
+    }
+    dark := 0
+    for pt in [[615, 215], [610, 780], [1310, 780], [960, 290], [700, 250], [1200, 250], [615, 500], [1310, 500]] {
+        c := RGB(Color(PX(pt[1]), PY(pt[2])))
+        dark += (Max(c.r, c.g, c.b) < 40)
+    }
+    if (red >= 15 && dark >= 6)
+        return true
     t := OcrRef(600, 195, 1010, 300, 2)
     return (IsObject(t) && InStr(t.t, "Settings"))
 }
