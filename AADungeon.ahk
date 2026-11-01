@@ -575,9 +575,10 @@ Screen(&r := "") {
         return "reward"
     if RegExMatch(t, "VICTORY|DEFEAT|Victory|Defeat|Waves\s*Completed|Total\s*Time\s*:")
         return "result"
-    if InStr(t, "Open Dungeon")
+    if RegExMatch(t, "i)Open\s*Dung|Return\s*to\s*lobby\s+Open")   ; (the Unit Overview can cover "Dungeon")
         return "afterroom"
-    if (InStr(t, "Starts in") || InStr(t, "change your units") || (InStr(t, "Yes") && InStr(t, "No") && RegExMatch(t, "\d/\d")))
+    if (InStr(t, "Starts in") || InStr(t, "change your units")
+        || (RegExMatch(t, "\bYes\b") && RegExMatch(t, "\bNo\b") && RegExMatch(t, "\d/\d")))   ; (case: "Now", "Not" are no "No")
         return "vote"
     if BoardXVisible()                             ; dungeon panel open, text not read
         return "route"
@@ -1572,6 +1573,8 @@ NewMapStop() {
 ; game settings > "Return to Lobby" (the row under Teleport back to Spawn), then a Yes/Confirm if one shows
 ReturnToLobby() {
     Focus()
+    CloseUi()
+    ToolTip(, , , 1)
     open := false
     Loop 2 {
         ClickRef(45, 1050, "l", "b")
@@ -2867,6 +2870,8 @@ MapRouteGo(onVote) {
 ; bottom edge). The row is checked by OCR and never clicked blind: "Return to Lobby" is right under it.
 SpawnReset() {
     Focus()
+    CloseUi()                                      ; the Unit Overview covers the settings' X
+    ToolTip(, , , 1)                               ; (the status text sits right above the gear)
     open := false
     Loop 2 {                                       ; the gear, then check the Settings title
         ClickRef(45, 1050, "l", "b")
@@ -2878,6 +2883,7 @@ SpawnReset() {
     }
     if !open {
         Out("  spawn: settings did not open")
+        Shot("spawn_nosettings")                   ; what was on the screen (shots\spawn_nosettings_*.png)
         return false
     }
     y := SpawnRow()                                ; game update (Nov 2026): the settings open at
