@@ -2890,6 +2890,16 @@ TeamLoad(nm) {
     if (STATE.HasOwnProp("team") && STATE.team = row)   ; already loaded (same team as last match)
         return false
     STATE.team := row
+    if !STATE.HasOwnProp("baseNames") {            ; slot names of settings (Name1..6) = the usual team
+        STATE.baseNames := []
+        Loop 6
+            STATE.baseNames.Push(CFG.Get("Name" A_Index, ""))
+    }
+    tn := StrSplit(IniRead(INI, "Settings", "Team" row "Names", ""), ",")   ; "Team2Names=C.E.O,Bulby,...": this team's names
+    Loop 6
+        CFG["Name" A_Index] := (tn.Length = 6) ? Trim(tn[A_Index]) : STATE.baseNames[A_Index]
+    if (tn.Length = 6)
+        Out("  slot names for team " row ": " CFG["Name1"] ", " CFG["Name2"] ", " CFG["Name3"] ", " CFG["Name4"] ", " CFG["Name5"] ", " CFG["Name6"])
     Out("Team for " nm ": Units (K) > Teams > LOAD team " row)
     Focus()
     Key("k")                                       ; Collection
