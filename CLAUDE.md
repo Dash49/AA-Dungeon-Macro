@@ -112,6 +112,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - `StuckRejoin` (min, default 10) + `PrivateServer` (link): `Progress(what)` marks real progress (known screen change, plan step,
   unit placed, level bought; Windows locked counts too). `Watchdog` (30 s timer): no progress that long -> `Rejoin()`: Discord note,
   close RobloxPlayerBeta.exe, `Run(link)` (browser), wait for the window, restart with `/autostart` (`AutoStart` waits for a big window).
+- `SelfUpdated()` on the room board: the macro file is newer than at start -> runs the new file with `/autostart` and exits
+  (deploys / F8 > Update take effect at a safe moment, no F3/F2 needed).
 - `StopAfterLosses` (default 4): `STATE.lossRow` counts DEFEATs in a row (VICTORY resets); at the limit -> Discord message + `Reload()` (= F3).
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`

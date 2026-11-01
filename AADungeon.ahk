@@ -124,13 +124,14 @@ LoadConfig()
 FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =====`n", LOGFILE, "UTF-8")
 Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode: " CFG["Preset"])
 Status("AA Dungeon ready - F2 start")
+SelfUpdated()                                       ; remember this file's time (restart on a newer one)
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 OnError(ErrLog)                                     ; script errors go to the log too
 OnMessage(0x5A01, WatchYenMsg)                      ; the yen from AAWatch.ahk
 OnMessage(0x4A, WatchCopy)                          ; panel / cards / match from AAWatch.ahk
 OnExit((*) => StopWatchers())
 if (A_Args.Length && A_Args[1] = "/autostart") {   ; restarted by the watchdog
-    Out("Restarted after being stuck - starting again in 5 s")
+    Out("Restarted by itself (stuck, or a newer macro file) - starting again in 5 s")
     SetTimer(AutoStart, -5000)
 }
 return
@@ -255,6 +256,25 @@ Rejoin(why) {
     ExitApp()
 }
 ; /autostart: wait (up to 5 min) for a big Roblox window, then F2
+; the macro file changed on disk since it started (an update was copied in while it ran):
+; start the new one with /autostart (it goes on by itself) and quit this one. Only called on the
+; room board, where no match runs and the dungeon state is read from the screen again.
+SelfUpdated() {
+    static t0 := ""
+    try t := FileGetTime(A_ScriptFullPath, "M")
+    catch
+        return false
+    if (t0 = "") {
+        t0 := t
+        return false
+    }
+    if (t = t0)
+        return false
+    Out("A newer macro file was copied in - restarting with it (the room board is a safe moment)")
+    Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
+    ExitApp()
+    return true
+}
 AutoStart() {
     static tries := 0
     if (!FindRoblox() || WIN.w < 1200) {
@@ -705,7 +725,10 @@ Start() {
         switch s {
             case "lobby":     DoLobby(r)
             case "intro":     DoIntro(r)
-            case "route":     DoRoute()
+            case "route":
+                if SelfUpdated()                   ; a newer macro file (F8 > Update / a fix):
+                    return                         ; restarted at the room board - no match running
+                DoRoute()
             case "loading":   Wait(800)
             case "vote":      DoVote(r)
             case "ingame":
