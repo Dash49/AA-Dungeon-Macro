@@ -3039,21 +3039,33 @@ MapRouteGo(onVote) {
 ; "Teleport back to Spawn" and the red X. Capy scrolls 6 notches at 800x600; measured live at
 ; 1920x1080 (2026-10-31): 10 notches put the row in the middle (button at 1192,612; 9 = row at the
 ; bottom edge). The row is checked by OCR and never clicked blind: "Return to Lobby" is right under it.
-; the user's way (2026-11-02): fixed clicks, no OCR - the gear, then the "Teleport back to
-; Spawn" button (measured live: settings open at Gameplay, button 1190,620); the game closes
-; the settings itself after the teleport
+; the user's way (2026-11-02): fixed clicks, no scanning - the gear, then the "Teleport back to
+; Spawn" button (measured live: settings open at Gameplay, button 1190,620). The title is only
+; read to wait for the window and to close it (X) when the game left it open (seen on the vote screen)
 SpawnTp() {
     Focus()
     ToolTip(, , , 1)                               ; (the status text sits right above the gear)
     ClickRef(45, 1050, "l", "b")                   ; gear
-    Sleep 1200
+    open := false
+    Loop 16 {                                      ; it can open slowly (vote screen): wait for it,
+        Sleep 250                                  ; a click before it shows hits nothing
+        if (open := SettingsOpen())
+            break
+    }
+    if !open {
+        Out("  spawn: settings did not open after the gear click - walking from here")
+        return false
+    }
     ClickRef(1190, 620)                            ; Teleport back to Spawn
-    Sleep 1200
-    if SettingsOpen() {                            ; still open: close it (red X)
-        ClickRef(1305, 233)
-        Sleep 600
+    Loop 3 {                                       ; the game closes it after a teleport;
+        Sleep 1000                                 ; still open -> its red X (measured 1302,228)
+        if !SettingsOpen()
+            break
+        Out("  spawn: settings still open after the teleport click - closing it (X)")
+        ClickRef(1302, 228)
     }
     Out("  spawn: gear + Teleport to Spawn clicked")
+    return true
 }
 SpawnReset() {
     Focus()
