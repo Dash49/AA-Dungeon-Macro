@@ -77,6 +77,7 @@ global WALKS := Map(
     "Strange Town", "940d+ 2597s+ 2606d- 3138s-")
 ; walks the player recorded (F7) - walks_user.txt "Map=<timings>", never in the download; they win over WALKS
 global REC := {on: false, t0: 0, ev: [], held: Map()}
+global USERWALK := Map()                            ; maps whose walk the player recorded (F7)
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
@@ -698,7 +699,7 @@ Start() {
             StageCheck(r.t)                        ; stage name (StageWalk)
         if (s = "result" || s = "reward" || s = "afterroom" || s = "died") {
             RS.ready := false, RS.endAt := A_TickCount ; a match just ended
-            RS.stage := "", RS.stageWalked := false, RS.voteAt := 0
+            RS.stage := "", RS.stageWalked := false, RS.voteAt := 0, RS.walkLater := ""
         }
         if (s != "ingame" && s != "vote" && closes < 2 && CloseUi()) {
             closes++                               ; closed it - look at the screen again
@@ -2261,6 +2262,15 @@ PlayMatch() {
     else
         StageWalk()                                 ; not done on the vote screen
     RS.camVote := false                             ; next match sets it again
+    if (RS.HasOwnProp("walkLater") && RS.walkLater != "") {   ; your walk: teleport to spawn, then walk
+        wnm := RS.walkLater, RS.walkLater := ""
+        if !(sp := SpawnReset())
+            Out("  teleport to spawn did not work - walking from here")
+        ok := WALKS.Has(wnm) ? PlayRoute(wnm, WALKS[wnm]) : false
+        Wait(300)
+        ShotWalk("your walk " wnm (sp ? "" : ", no teleport") (ok ? "" : ", walk stopped"))
+        RS.hillScan := ""                           ; hills were seen from the spawn: look again
+    }
     if !IsObject(RS.hillScan)                       ; hills not checked on the vote screen
         HillScan()
     if IsObject(RS.hillScan)                        ; ground units keep off these hills
@@ -2911,6 +2921,11 @@ RecordToggle() {
             Hotkey("~*" k, RecKey.Bind(k, true), "On")
             Hotkey("~*" k " up", RecKey.Bind(k, false), "On")
         }
+        if !InStr(AllText(), "Starts in") {         ; in a match: start at the spawn, like the playback
+            Out("Walk recording: teleport to spawn first")
+            SpawnReset()
+            REC.t0 := A_TickCount, REC.ev := [], REC.held := Map()
+        }
         Status("RECORDING your walk - walk to the spot (don't turn the camera), then F7 to save")
         Out("Walk recording started (F7 again saves it)")
         SoundBeep(1000, 150)
@@ -2972,6 +2987,7 @@ SaveUserWalk(nm, spec) {
         if (MapKey(k) = MapKey(nm))
             WALKS.Delete(k)
     WALKS[nm] := spec
+    USERWALK[MapKey(nm)] := true
 }
 LoadUserWalks() {
     f := A_ScriptDir "\walks_user.txt"
@@ -2987,6 +3003,7 @@ LoadUserWalks() {
                 if (MapKey(k) = MapKey(p[1]))
                     WALKS.Delete(k)
             WALKS[Trim(p[1])] := Trim(p[2]), n++
+            USERWALK[MapKey(p[1])] := true
         }
     }
     if n
@@ -3006,7 +3023,13 @@ MapRouteGo(onVote) {
         return false
     }
     RS.stageWalked := true                         ; StageWalk is not used on top of it
-    Out("Map route: " nm " (Capy's camera, teleport to spawn, walk)")
+    if (onVote && USERWALK.Has(MapKey(nm))) {      ; the player's own walk: always teleport first -
+        CapyCamera()                               ; the settings do not open on the vote screen
+        RS.walkLater := nm
+        Out("Map route: " nm " (your walk) - after the vote: teleport to spawn, then walk")
+        return true
+    }
+    Out("Map route: " nm (USERWALK.Has(MapKey(nm)) ? " (your walk, " : " (Capy's ") "camera, teleport to spawn, walk)")
     CapyCamera()
     sp := true
     if onVote                                      ; UPD 21: the settings do not open during the vote -

@@ -41,7 +41,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   Return to Lobby is the next row; red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
   Other maps: `StageWalk` then `CameraSetup` (old way).
   F7 `RecordToggle`: records the player's own walk (~* hotkeys on w/a/s/d/LShift/Space, key-up/down ms) -> `walks_user.txt`
-  (`SaveUserWalk`, loaded into WALKS at start by `LoadUserWalks`, wins over Capy's). F6 = `CapyCamera` (the walk camera).
+  (`SaveUserWalk`, loaded into WALKS at start by `LoadUserWalks`, wins over Capy's); `USERWALK` marks them). User walks always teleport first: on the vote screen (settings blocked) `MapRouteGo` only sets the camera and `RS.walkLater`; `PlayMatch` then does `SpawnReset` -> `PlayRoute` -> `ShotWalk` and rescans hills. F7 in a match = `SpawnReset` before recording. F6 = `CapyCamera` (the walk camera).
   A new map on the vote screen: `NewMapStop(true)` sets the camera and waits 40 s for F7; recorded -> plays on, else leaves.
   `NewMapStop`=1 (owner only: default 0, settings.ini by hand, not in F8/README - like ShotScreens): a map never seen (`IsKnownMap`: maps_seen.txt / WALKS / StageWalk; clean name read twice on the loading screen,
   `NewMapCheck` before `MapSeen` adds it) -> `NewMapStop` in `StartMoves`: Discord note, settings > Return to Lobby (`ReturnToLobby`), `Reload()`.
