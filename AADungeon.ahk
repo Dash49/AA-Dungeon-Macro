@@ -2776,13 +2776,15 @@ SpawnReset() {
         Out("  spawn: settings did not open")
         return false
     }
-    Loop 10                                        ; one every 350 ms, at Capy's (460,350)
-        SettingsWheel("WheelDown")
+    y := SpawnRow()                                ; game update (Nov 2026): the settings open at
+    if !y                                          ; "Gameplay", the row is already there - no scroll
+        Loop 10                                    ; older layout: one every 350 ms, at Capy's (460,350)
+            SettingsWheel("WheelDown")
     done := false
     Loop 22 {                                      ; not on screen yet: further down, then back up
-        if (y := SpawnRow()) {
+        if (y || (y := SpawnRow())) {
             cy := (Abs(y - PY(612)) < 25 * WIN.u) ? PY(612) : y   ; the measured button spot
-            ClickAt(PX(1192), cy)
+            ClickAt(SpawnButtonX(cy), cy)
             Out("  spawn: Teleport to Spawn clicked" (cy = y ? " (row found " Round((y - PY(612)) / WIN.u) " px from the usual spot)" : ""))
             done := true
             break
@@ -2828,6 +2830,19 @@ SettingsWheel(dir) {
     Sleep 40
     Click dir
     Sleep 350
+}
+; x of the round button at the right end of the row: its grey ring (the row is darker), else the measured x
+SpawnButtonX(cy) {
+    Snap()
+    x1 := 0, x2 := 0
+    xx := PX(1080)
+    while (xx <= PX(1300)) {
+        c := RGB(Color(xx, cy - 14 * WIN.u))       ; the ring's top edge, above the arrow
+        if (Min(c.r, c.g, c.b) >= 40 && Max(c.r, c.g, c.b) <= 115 && Max(c.r, c.g, c.b) - Min(c.r, c.g, c.b) <= 15)
+            x1 := x1 ? x1 : xx, x2 := xx
+        xx += 2
+    }
+    return (x1 && x2 - x1 >= 40 * WIN.u && x2 - x1 <= 160 * WIN.u) ? (x1 + x2) / 2 : PX(1192)
 }
 ; screen y of the "Teleport to Spawn" row in the open settings, 0 = not on screen
 SpawnRow() {
