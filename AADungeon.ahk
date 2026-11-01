@@ -3049,15 +3049,19 @@ SpawnReset() {
     Focus()
     CloseUi()                                      ; the Unit Overview covers the settings' X
     ToolTip(, , , 1)                               ; (the status text sits right above the gear)
-    open := false
-    Loop 2 {                                       ; the gear, then check the Settings title
+    open := false, clicks := 0
+    while (!open && clicks < 4) {                  ; the gear, then wait for the Settings title -
+        clicks++                                   ; a 2nd click before it shows closes it again
+        ToolTip(, , , 1)
         ClickRef(45, 1050, "l", "b")
-        Sleep 1000
-        if SettingsOpen() {
-            open := true
-            break
+        Loop 8 {                                   ; up to ~3 s (slow right after the match starts)
+            Sleep 250
+            if (open := SettingsOpen())
+                break
         }
     }
+    if (open && clicks > 1)
+        Out("  spawn: settings opened on gear click " clicks)
     if !open {
         Out("  spawn: settings did not open")
         Shot("spawn_nosettings")                   ; what was on the screen (shots\spawn_nosettings_*.png)
@@ -3082,6 +3086,8 @@ SpawnReset() {
         Out("  spawn: 'Teleport to Spawn' not found in the settings - not clicking blind")
     Sleep 1500
     Loop 2 {                                       ; red X of the settings window (Capy: 584,151)
+        if !SettingsOpen()                         ; the game closes it after the teleport
+            break
         Snap()
         n := 0, sx := 0, sy := 0
         yy := 150
@@ -3100,8 +3106,6 @@ SpawnReset() {
         else
             ClickRef(1305, 233)                    ; (measured; Capy: 584,151)
         Sleep 700
-        if !SettingsOpen()
-            break
     }
     Sleep 1000                                     ; Capy waits 1 s before walking
     return done
