@@ -85,14 +85,14 @@ LvlNum(s) {
 }
 PanelRead() {
     r := OcrRef(0, 300, 600, 900, 2, "l", "c")             ; (taller panel with DMG / ability rows: button lower)
-    if !(IsObject(r) && (InStr(r.t, "pgrade") || RegExMatch(r.t, "i)\bMax\b")))
+    if !(IsObject(r) && (RegExMatch(r.t, "i)pgrade|\bUPG\b") || RegExMatch(r.t, "i)\bMax\b")))
         return ""
     t := RegExReplace(r.t, "\s+", " ")
     p := {name: "", lvl: -1, max: 0, cost: -1, bx: 0, by: 0}
-    tr := OcrRef(20, 315, 300, 415, 2, "l", "c")             ; the big title
+    tr := OcrRef(20, 355, 270, 422, 2, "l", "c")             ; the big title (Nov 2026 UI: a bit lower)
     p.name := IsObject(tr) ? Trim(RegExReplace(tr.t, "\s+", " ")) : ""
     p.name := StrReplace(StrReplace(p.name, FS), RS_)
-    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
+    if RegExMatch(t, "i)(?:Upgrade|UPG|UP6|UPC)\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") ? 1 : 0
     if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; same as the macro
@@ -270,7 +270,7 @@ UnitPanelVisible() {
 }
 ScanCards() {
     u := WIN.u, cards := []
-    for bx in [1491, 1776] {
+    for bx in [1491, 1809, 1776] {                 ; 2nd column: 1809 since the Nov 2026 UI, 1776 before
         sx := PX(bx - 30, "r")
         y := PY(150), yEnd := PY(1000), runLen := 0, top := 0
         while (y <= yEnd) {
@@ -286,7 +286,11 @@ ScanCards() {
                     && IsCyan(Color(PX(bx + 45, "r"), fy))) {
                     uy := fy - 45 * u
                     g := RGB(Color(sx, uy - 13 * u))
-                    cards.Push({x: PX(bx, "r"), y: uy, buy: (g.g > 170 && g.r < 130 && g.b < 100)})
+                    dup := false                   ; (the two 2nd-column spots can both see one button)
+                    for oc in cards
+                        dup := dup || (Abs(oc.y - uy) < 20 * u && Abs(oc.x - PX(bx, "r")) < 60 * u)
+                    if !dup
+                        cards.Push({x: PX(bx, "r"), y: uy, buy: (g.g > 170 && g.r < 130 && g.b < 100)})
                 }
                 runLen := 0
             }
@@ -347,7 +351,7 @@ Words(r) {
     return res_
 }
 ReadYenOnce() {
-    r := OcrRef(850, 920, 1070, 971, 3, "c", "b")   ; just the yen line, not the hotbar
+    r := OcrRef(820, 872, 1100, 932, 3, "c", "b")   ; just the yen line, not the hotbar (moved up in the Nov 2026 UI)
     if !IsObject(r)
         return -1
     best := ""

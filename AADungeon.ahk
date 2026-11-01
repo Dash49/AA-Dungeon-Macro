@@ -498,7 +498,7 @@ ReadYen() {
 }
 
 ReadYenOnce() {
-    r := OcrRef(850, 920, 1070, 971, 3, "c", "b")   ; just the yen line, not the hotbar
+    r := OcrRef(820, 872, 1100, 932, 3, "c", "b")   ; just the yen line, not the hotbar (moved up in the Nov 2026 UI)
     if !IsObject(r)
         return -1
     best := ""
@@ -2149,7 +2149,7 @@ PlayMatch() {
 ; the prices under the 6 hotbar slots -> Cost1..Cost6 (the team can change)
 ReadHotbarCosts() {
     Loop 2 {
-        r := OcrRef(700, 1008, 1220, 1056, 3, "c", "b")
+        r := OcrRef(600, 982, 1320, 1015, 3, "c", "b")   ; prices (wider hotbar, names under it since Nov 2026)
         if !IsObject(r)
             continue
         nums := []
@@ -2490,8 +2490,9 @@ NearPath(cells, x, y, r) {
     return false
 }
 InUi(x, y) {
-    return (y < 175 || y > 960 || (y > 900 && x > 600 && x < 1320) || x < 140 || x > 1770
-        || (x > 1640 && y < 210) || (MT.HasOwnProp("ovOpen") && MT.ovOpen && x > 1225))
+    return (y < 175 || y > 960 || (y > 870 && x > 590 && x < 1340) || x < 140 || x > 1770
+        || (x > 1640 && y < 210) || (MT.HasOwnProp("ovOpen") && MT.ovOpen && x > 1225)
+        || (x > 1630 && y > 790) || (x > 1570 && y > 225 && y < 530))   ; minimap, level info (Nov 2026 UI)
 }
 
 AddCand(cands, cells, x, y, gap, maxN) {
@@ -3167,7 +3168,7 @@ GroupAnchor(slot) {
 ; the big name on the open unit panel (left), "" = not readable
 OpenPanelName() {
     Loop 2 {
-        r := OcrRef(20, 315, 300, 415, 2, "l", "c")
+        r := OcrRef(20, 355, 270, 422, 2, "l", "c")
         t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
         if (t != "")
             return t
@@ -3588,7 +3589,7 @@ IsCyan(col) {
 
 ScanCards() {
     u := WIN.u, cards := []
-    for bx in [1491, 1776] {
+    for bx in [1491, 1809, 1776] {                 ; 2nd column: 1809 since the Nov 2026 UI, 1776 before
         sx := PX(bx - 30, "r")
         y := PY(150), yEnd := PY(1000), runLen := 0, top := 0
         while (y <= yEnd) {
@@ -3607,7 +3608,11 @@ ScanCards() {
                     && IsCyan(Color(PX(bx + 45, "r"), fy))) {
                     uy := fy - 45 * u
                     g := RGB(Color(sx, uy - 13 * u))
-                    cards.Push({x: PX(bx, "r"), y: uy, buy: (g.g > 170 && g.r < 130 && g.b < 100), max: false, cost: -1})
+                    dup := false                   ; (the two 2nd-column spots can both see one button)
+                    for oc in cards
+                        dup := dup || (Abs(oc.y - uy) < 20 * u && Abs(oc.x - PX(bx, "r")) < 60 * u)
+                    if !dup
+                        cards.Push({x: PX(bx, "r"), y: uy, buy: (g.g > 170 && g.r < 130 && g.b < 100), max: false, cost: -1})
                 }
                 runLen := 0
             }
@@ -3956,7 +3961,7 @@ PanelName(c, count) {
     CloseUnitPanel()
     ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)
     Wait(500)
-    r := OcrRef(20, 325, 295, 400, 2, "l", "c")          ; title only (Upgrade [n] sits right of it)
+    r := OcrRef(20, 355, 270, 422, 2, "l", "c")          ; title only (UPG [n] sits right of it)
     t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
     CloseUnitPanel()
     MT.pn[key] := t
@@ -4212,7 +4217,7 @@ PanelTitle(c) {
         Snap()
         if UnitPanelVisible() {
             if (++seen >= 2) {                     ; shown twice in a row: the title is drawn
-                r := OcrRef(20, 315, 300, 415, 2, "l", "c")          ; title only
+                r := OcrRef(20, 355, 270, 422, 2, "l", "c")          ; title only
                 t := IsObject(r) ? Trim(RegExReplace(r.t, "\s+", " ")) : ""
                 if (t != "")
                     break
@@ -4916,7 +4921,7 @@ LvlNum(s) {
 }
 ; the level box "Upgrade [n]" (top right of the panel) read alone at 3x -> n or -1
 PanelLevel() {
-    r := OcrRef(280, 350, 445, 400, 3, "l", "c")
+    r := OcrRef(280, 380, 450, 430, 3, "l", "c")             ; "UPG [n] (MAX)" (Nov 2026 UI)
     if !IsObject(r)
         return -1
     if RegExMatch(r.t, "i)[\[(\{|]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]?", &m)
@@ -4930,13 +4935,13 @@ PanelInfo() {
     if (IsObject(wp) && (wp.lvl >= 0 || wp.max) && wp.name != "" && (wp.by || wp.max))
         return wp                                  ; (level or button missing there: read it here)
     r := OcrRef(0, 300, 600, 900, 2, "l", "c")             ; (taller panel with DMG / ability rows: button lower)
-    if !(IsObject(r) && InStr(r.t, "pgrade") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
+    if !(IsObject(r) && RegExMatch(r.t, "i)pgrade|\bUPG\b") || IsObject(r) && RegExMatch(r.t, "i)\bMax\b"))
         return ""
     t := RegExReplace(r.t, "\s+", " ")
     p := {name: "", lvl: -1, max: false, cost: -1, bx: 0, by: 0, raw: SubStr(t, 1, 120)}
-    tr := OcrRef(20, 315, 290, 410, 2, "l", "c")             ; the big title
+    tr := OcrRef(20, 355, 270, 422, 2, "l", "c")             ; the big title (Nov 2026 UI: a bit lower)
     p.name := IsObject(tr) ? Trim(RegExReplace(tr.t, "\s+", " ")) : ""
-    if RegExMatch(t, "i)Upgrade\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
+    if RegExMatch(t, "i)(?:Upgrade|UPG|UP6|UPC)\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") > 0
     if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; "Upgrade: 8500" ("Upgrade:] 8500")
@@ -5253,8 +5258,8 @@ OpenPanel(u) {
         Loop 2 {
             ClickAt(c.x - 112 * WIN.u, c.y + 22 * WIN.u)   ; the picture on the card
             Wait(550)
-            r := OcrRef(0, 180, 900, 600, 2, "l", "c")
-            if (IsObject(r) && InStr(r.t, "pgrade") && (nm = "" || NameScore(r.t, nm) >= 0.6))
+            r := OcrRef(0, 180, 900, 720, 2, "l", "c")
+            if (IsObject(r) && RegExMatch(r.t, "i)pgrade|\bUPG\b") && (nm = "" || NameScore(r.t, nm) >= 0.6))
                 return r                           ; the right unit's panel
             CloseUnitPanel()
             c := CardOf(u)
@@ -5266,8 +5271,8 @@ OpenPanel(u) {
     for dy in [-10, -25, 4, -40, -55] {
         ClickRef(u.x, u.y + dy)
         Wait(450)
-        r := OcrRef(0, 180, 860, 560, 2, "l", "c")
-        if (IsObject(r) && InStr(r.t, "pgrade"))
+        r := OcrRef(0, 180, 860, 720, 2, "l", "c")         ; (the Upgrade button is at ~670 now)
+        if (IsObject(r) && RegExMatch(r.t, "i)pgrade|\bUPG\b"))
             return r
     }
     return ""

@@ -94,6 +94,10 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
 - Upgrades: Unit Overview (key F). Card level = lit segments of the bar under the card (`CardLevel`).
   `OverviewScroll` scrolls one notch at a time – an extra wheel notch at the list end zooms the
   camera into first person (a classic bug). `FixFirstPerson()` repairs that.
+- Game UI update (Nov 2026), measured live: unit panel title at y~396 (OCR 20,355-270,422), level box "UPG [n] (MAX)"
+  at y~405 (regexes accept Upgrade/UPG), Upgrade button y~670 (OpenPanel OCR to 720), yen line y~900 (872-932, b),
+  hotbar prices y~1002 (600-1320 x 982-1015, names under the cards now), overview 2nd column First at x 1809 (1776 kept
+  for the old layout, deduped), new minimap bottom right + level info right side excluded in `InUi`. AAWatch copies updated.
 - Coordinates: everything is written in a 1920x1080 reference. `PX(x, anchor)` / `PY(y, anchor)`
   convert to the real client (anchors l/c/r and t/c/b; scale `WIN.u` = client height / 1080).
   `Snap()` copies the client into a buffer; `Color(x, y)` reads it (screen coords).
