@@ -160,7 +160,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0, "MapTeams", "",
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0, "MapTeams", "", "MapProfiles", "",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -2173,8 +2173,20 @@ LoadPlan() {
         else
             FileAppend("place 1 x3`nplace 2 x1`nupgrade all max`n", PLANFILE, "UTF-8")
     }
+    steps := PlanSteps(PLANFILE)
+    if !IsObject(steps) {
+        Status("plan.txt has errors - see the log")
+        return false
+    }
+    global MT
+    MT := {planSteps: steps}
+    STATE.basePlan := steps                        ; the plan for maps without their own (MapProfiles)
+    return true
+}
+; the steps of one plan file ("" + log lines when a line can't be read)
+PlanSteps(file) {
     steps := [], bad := []
-    for i, raw in StrSplit(FileRead(PLANFILE, "UTF-8"), "`n", "`r") {
+    for i, raw in StrSplit(FileRead(file, "UTF-8"), "`n", "`r") {
         line := Trim(RegExReplace(raw, ";.*$"))
         if (line = "")
             continue
@@ -2225,13 +2237,64 @@ LoadPlan() {
     }
     if bad.Length {
         for b in bad
-            Out("Plan error - " b)
-        Status("plan.txt has errors - see the log")
-        return false
+            Out("Plan error (" file ") - " b)
+        return ""
     }
+    return steps
+}
+
+; per-map setup (user wish, F8 "ชุดแผน"): settings MapProfiles = "Sky Island,..."; each has its own
+; plan file plan_<map>.txt and slot names / prices / types in the section [Map <map>].
+; Maps without one use plan.txt and [Settings]. Called at the start of every match.
+MapProfile(nm) {
+    if (nm = "")
+        return ""
+    for pf in StrSplit(IniRead(INI, "Settings", "MapProfiles", ""), ",")
+        if (Trim(pf) != "" && MapKey(Trim(pf)) = MapKey(nm))
+            return Trim(pf)
+    return ""
+}
+ApplyMapProfile() {
     global MT
-    MT := {planSteps: steps}
-    return true
+    if !STATE.HasOwnProp("baseUnits") {            ; Name/Cost/Type 1-6 of [Settings]
+        STATE.baseUnits := Map()
+        for kk in ["Name", "Cost", "Type"]
+            Loop 6
+                STATE.baseUnits[kk A_Index] := CFG.Get(kk A_Index, "")
+    }
+    nm := MatchMap(), prof := MapProfile(nm)
+    for kk, v in STATE.baseUnits
+        CFG[kk] := v
+    if STATE.HasOwnProp("team") {                  ; a team loaded on the vote screen (MapTeams)
+        tn := StrSplit(IniRead(INI, "Settings", "Team" STATE.team "Names", ""), ",")
+        if (tn.Length = 6)
+            Loop 6
+                CFG["Name" A_Index] := Trim(tn[A_Index])
+    }
+    if (prof != "") {
+        for kk in ["Name", "Cost", "Type"]
+            Loop 6 {
+                v := IniRead(INI, "Map " prof, kk A_Index, "`a")
+                if (v != "`a")
+                    CFG[kk A_Index] := IsNumber(v) ? v + 0 : v
+            }
+    }
+    steps := STATE.basePlan, own := false, pfile := A_ScriptDir "\plan_" prof ".txt"
+    if (prof != "" && FileExist(pfile)) {
+        if !STATE.HasOwnProp("planCache")
+            STATE.planCache := Map()
+        t := FileGetTime(pfile, "M")
+        if !(STATE.planCache.Has(pfile) && STATE.planCache[pfile].t = t)
+            STATE.planCache[pfile] := {t: t, steps: PlanSteps(pfile)}
+        if IsObject(STATE.planCache[pfile].steps)
+            steps := STATE.planCache[pfile].steps, own := true
+        else
+            Out("  plan_" prof ".txt has errors - using plan.txt")
+    }
+    if (prof != "")
+        Out("Setup for " prof ": " (own ? "plan_" prof ".txt" : "plan.txt") " (" steps.Length " steps), units "
+            . CFG["Name1"] ", " CFG["Name2"] ", " CFG["Name3"] ", " CFG["Name4"] ", " CFG["Name5"] ", " CFG["Name6"])
+    MT.planSteps := steps
 }
 
 ; ================================================================ match
@@ -2240,6 +2303,7 @@ PlayMatch() {
     Out("Match started - running the plan")
     if NewMapStop()                                ; a new map seen on the vote screen: leave now
         return
+    ApplyMapProfile()                              ; this map's own plan / units (MapProfiles)
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
     for st in MT.planSteps                          ; the steps are shared between matches
         st.done := false, st.want := "", st.tries := 0, st.said := "", st.autoChk := false
@@ -2889,17 +2953,7 @@ TeamLoad(nm) {
         return false
     if (STATE.HasOwnProp("team") && STATE.team = row)   ; already loaded (same team as last match)
         return false
-    STATE.team := row
-    if !STATE.HasOwnProp("baseNames") {            ; slot names of settings (Name1..6) = the usual team
-        STATE.baseNames := []
-        Loop 6
-            STATE.baseNames.Push(CFG.Get("Name" A_Index, ""))
-    }
-    tn := StrSplit(IniRead(INI, "Settings", "Team" row "Names", ""), ",")   ; "Team2Names=C.E.O,Bulby,...": this team's names
-    Loop 6
-        CFG["Name" A_Index] := (tn.Length = 6) ? Trim(tn[A_Index]) : STATE.baseNames[A_Index]
-    if (tn.Length = 6)
-        Out("  slot names for team " row ": " CFG["Name1"] ", " CFG["Name2"] ", " CFG["Name3"] ", " CFG["Name4"] ", " CFG["Name5"] ", " CFG["Name6"])
+    STATE.team := row                              ; (its slot names: ApplyMapProfile, Team<row>Names)
     Out("Team for " nm ": Units (K) > Teams > LOAD team " row)
     Focus()
     Key("k")                                       ; Collection

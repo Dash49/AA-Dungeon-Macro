@@ -36,7 +36,7 @@ global DEF := Map(
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0, "MapTeams", "",
+    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0, "MapTeams", "", "MapProfiles", "",
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -185,6 +185,7 @@ global C := {}              ; ปุ่ม/ช่องอื่นๆ
 global G := ""
 global Dirty := false
 global Filling := false
+global PROF := ""           ; ชุดแผนที่กำลังแก้: "" = ทุกด่าน (plan.txt), อื่นๆ = ชื่อด่าน (plan_<ด่าน>.txt + [Map <ด่าน>])
 
 if (A_Args.Length && A_Args[1] = "/report") {       ; F9 in the macro
     ReportBug()
@@ -209,7 +210,9 @@ BuildGui() {
 
     ; ---------------------------------------------------- แท็บ 1: แผน
     tab.UseTab(1)
-    C.legend := G.AddText("x25 y45 w750 cGray", "มาโครจะทำทีละขั้นจากบนลงล่างในทุกห้อง  (ช่อง 1-6 = ช่อง hotbar ของยูนิต)")
+    C.legend := G.AddText("x25 y45 w430 h20 cGray", "ทำทีละขั้นจากบนลงล่าง (ช่อง 1-6 = hotbar)")
+    C.prof := []                                   ; ชุดแผน: ทุกด่าน / ด่านที่มีแผนของตัวเอง (แท็บ 1 และ 4)
+    AddProfRow(460, 41)
     C.lv := G.AddListView("x25 y70 w750 h215 -Multi Grid", ["#", "ขั้นตอน", "คำสั่งใน plan.txt", "หมายเหตุ"])
     C.lv.ModifyCol(1, 35), C.lv.ModifyCol(2, 330), C.lv.ModifyCol(3, 210), C.lv.ModifyCol(4, 170)
     C.lv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Steps.Length) ? FillBuilder(Steps[row]) : 0)
@@ -386,7 +389,8 @@ BuildGui() {
 
     ; ------------------------------------------- แท็บ 4: ราคา / ทั่วไป
     tab.UseTab(4)
-    G.AddText("x25 y45 w750 cGray", "ชื่อยูนิต: พิมพ์ให้ตรงกับชื่อใต้รูปใน Unit Overview (เช่น C.E.O., Idol) มาโครจะหาการ์ดอัปเกรดจากชื่อนี้")
+    G.AddText("x25 y45 w430 h20 cGray", "ชื่อยูนิต: ให้ตรงกับชื่อใต้รูปในเกม (เช่น C.E.O., Idol)")
+    AddProfRow(460, 41)
     C.type := [], C.name := []
     Loop 6 {
         yy := 75 + (A_Index - 1) * 34
@@ -692,8 +696,7 @@ RefreshNames() {
         if (SlotNames[i] != "")
             leg .= "   " i "=" SlotNames[i]
     }
-    C.legend.Text := (leg = "") ? "มาโครจะทำทีละขั้นจากบนลงล่างในทุกห้อง  (ช่อง 1-6 = ช่อง hotbar ของยูนิต  ตั้งชื่อยูนิตได้ในแท็บ ยูนิต / ทั่วไป)"
-        : "ช่อง hotbar:" leg
+    C.legend.Text := (leg = "") ? "ทำทีละขั้นจากบนลงล่าง (ช่อง 1-6 = hotbar)" : "ช่อง:" StrReplace(leg, "   ", " ")
     row := C.lv.GetNext()
     RefreshPlan(row)
     UpdateBuilder()
@@ -730,8 +733,100 @@ StepDesc(s) {
 LoadPlanFile() {
     global Steps
     Steps := []
-    text := FileExist(PLANFILE) ? FileRead(PLANFILE, "UTF-8") : EXAMPLE_PLAN
+    pf := PlanFileOf(PROF)                         ; a map without its own file yet starts as a copy of plan.txt
+    text := FileExist(pf) ? FileRead(pf, "UTF-8") : FileExist(PLANFILE) ? FileRead(PLANFILE, "UTF-8") : EXAMPLE_PLAN
     LoadPlanText(text)
+}
+
+; ---- ชุดแผนต่อด่าน (MapProfiles): แผน + ชื่อ/ราคา/ประเภทยูนิตของด่านนั้น
+PlanFileOf(p) => (p = "") ? PLANFILE : A_ScriptDir "\plan_" p ".txt"
+ProfSection(p) => (p = "") ? "Settings" : "Map " p
+ProfMaps() {
+    pm := []
+    for nm in StrSplit(IniRead(INI, "Settings", "MapProfiles", ""), ",")
+        if (Trim(nm) != "")
+            pm.Push(Trim(nm))
+    return pm
+}
+AddProfRow(x, y) {
+    G.AddText("x" x " y" (y + 4) " w50", "ชุดแผน")
+    pitems := ["ทุกด่าน (ปกติ)"]
+    for nm in ProfMaps()
+        pitems.Push(nm)
+    dd := G.AddDropDownList("x" (x + 50) " y" y " w180 Choose1", pitems)
+    dd.OnEvent("Change", OnProf)
+    C.prof.Push(dd)
+    G.AddButton("x" (x + 235) " y" (y - 1) " w80", "+ ด่าน").OnEvent("Click", (*) => AddProf())
+}
+; switching: what was typed for the old one is saved to its files first
+OnProf(ctl, *) {
+    global PROF
+    np := (ctl.Value <= 1) ? "" : ctl.Text
+    for dd in C.prof
+        dd.Value := ctl.Value
+    if (np = PROF)
+        return
+    try {
+        SaveUnits(PROF)
+        SavePlan()
+    } catch as err {
+        MsgBox("บันทึกชุดเดิมไม่สำเร็จ: " err.Message, "AA Dungeon", "Icon!")
+        return
+    }
+    PROF := np
+    LoadPlanFile()
+    LoadUnits(PROF)
+    RefreshNames()
+    if Steps.Length
+        FillBuilder(Steps[1])
+    C.status.Text := (PROF = "") ? "กำลังแก้: แผน/ยูนิตของทุกด่าน (plan.txt)"
+        : "กำลังแก้: แผน/ยูนิตของ " PROF " (plan_" PROF ".txt) - ด่านนี้ใช้ชุดนี้แทนชุดปกติ"
+}
+AddProf() {
+    last := StrSplit(IniRead(INI, "Settings", "LastMapSeen", ""), "|")[1]
+    ib := InputBox("ชื่อด่าน (ตามที่หน้าโหลดเกมเขียน เช่น Sky Island)`nด่านนี้จะมีแผนและยูนิตของตัวเอง เริ่มจากสำเนาของชุดที่เปิดอยู่", "AA Dungeon - เพิ่มชุดแผนของด่าน", "w420 h150", last)
+    nm := Trim(StrReplace(StrReplace(ib.Value, ",", ""), "|", ""))
+    if (ib.Result != "OK" || nm = "")
+        return
+    maps := ProfMaps()
+    for i, m in maps
+        if (StrLower(m) = StrLower(nm)) {
+            C.prof[1].Value := i + 1
+            return OnProf(C.prof[1])
+        }
+    maps.Push(nm), lst := ""
+    for m in maps
+        lst .= (lst != "" ? "," : "") m
+    IniWrite(lst, INI, "Settings", "MapProfiles")
+    for dd in C.prof
+        dd.Add([nm])
+    C.prof[1].Value := maps.Length + 1
+    OnProf(C.prof[1])
+}
+LoadUnits(p) {
+    global Filling
+    Filling := true
+    sec := ProfSection(p)
+    Loop 6 {
+        nmv := IniRead(INI, sec, "Name" A_Index, IniRead(INI, "Settings", "Name" A_Index, ""))
+        cst := IniRead(INI, sec, "Cost" A_Index, IniRead(INI, "Settings", "Cost" A_Index, DEF["Cost" A_Index]))
+        typ := IniRead(INI, sec, "Type" A_Index, IniRead(INI, "Settings", "Type" A_Index, "ground"))
+        C.name[A_Index].Value := nmv
+        E["Cost" A_Index].Value := cst
+        C.type[A_Index].Value := (StrLower(typ) = "hill") ? 2 : 1
+    }
+    Filling := false
+}
+SaveUnits(p) {
+    sec := ProfSection(p)
+    Loop 6 {
+        cst := Trim(E["Cost" A_Index].Value)
+        if !IsNumber(cst)
+            throw Error("ราคาช่อง " A_Index " ต้องเป็นตัวเลข")
+        IniWrite(Trim(StrReplace(C.name[A_Index].Value, "|", "")), INI, sec, "Name" A_Index)
+        IniWrite(cst, INI, sec, "Cost" A_Index)
+        IniWrite(C.type[A_Index].Value = 2 ? "hill" : "ground", INI, sec, "Type" A_Index)
+    }
 }
 
 LoadPlanText(text) {
@@ -957,7 +1052,7 @@ SavePlan() {
             t .= "; " s.note "`r`n"
         t .= StepCmd(s) "`r`n"
     }
-    f := FileOpen(PLANFILE, "w", "UTF-8")
+    f := FileOpen(PlanFileOf(PROF), "w", "UTF-8")
     f.Write(t)
     f.Close()
 }
@@ -1425,7 +1520,8 @@ SaveAll(restart) {
     }
     try {
         for k, ctl in E
-            IniWrite(Trim(ctl.Value), INI, "Settings", k)
+            if !RegExMatch(k, "^Cost\d$")             ; prices: SaveUnits (the chosen ชุดแผน)
+                IniWrite(Trim(ctl.Value), INI, "Settings", k)
         IniWrite(ItemsString(), INI, "Settings", "Items")
         IniWrite(C.save.Value ? 1 : 0, INI, "Settings", "SaveChests")
         IniWrite(C.vote.Value ? 1 : 0, INI, "Settings", "AutoVote")
@@ -1442,10 +1538,7 @@ SaveAll(restart) {
         IniWrite(Trim(C.hook.Value), INI, "Settings", "Webhook")
         IniWrite(Trim(C.ps.Value), INI, "Settings", "PrivateServer")
         IniWrite(C.hookShot.Value ? 1 : 0, INI, "Settings", "WebhookShots")
-        for i, dd in C.type
-            IniWrite(dd.Value = 2 ? "hill" : "ground", INI, "Settings", "Type" i)
-        for i, ne in C.name
-            IniWrite(Trim(StrReplace(ne.Value, "|", "")), INI, "Settings", "Name" i)
+        SaveUnits(PROF)                            ; names / prices / types of the chosen ชุดแผน
         SavePlan()
     } catch as err {
         MsgBox("บันทึกไม่สำเร็จ: " err.Message, "AA Dungeon", "Icon!")
