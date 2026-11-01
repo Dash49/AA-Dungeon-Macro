@@ -43,7 +43,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   F7 `RecordToggle`: records the player's own walk (~* hotkeys on w/a/s/d/LShift/Space, key-up/down ms) -> `walks_user.txt`
   (`SaveUserWalk`, loaded into WALKS at start by `LoadUserWalks`, wins over Capy's). F6 = `CapyCamera` (the walk camera).
   A new map on the vote screen: `NewMapStop(true)` sets the camera and waits 40 s for F7; recorded -> plays on, else leaves.
-  `NewMapStop`=1: a map never seen (`IsKnownMap`: maps_seen.txt / WALKS / StageWalk; clean name read twice on the loading screen,
+  `NewMapStop`=1 (owner only: default 0, settings.ini by hand, not in F8/README - like ShotScreens): a map never seen (`IsKnownMap`: maps_seen.txt / WALKS / StageWalk; clean name read twice on the loading screen,
   `NewMapCheck` before `MapSeen` adds it) -> `NewMapStop` in `StartMoves`: Discord note, settings > Return to Lobby (`ReturnToLobby`), `Reload()`.
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.
   Plan syntax: `place 1 x3 [random|near|far|group|spread|cover|center|at X,Y]`,

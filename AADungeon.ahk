@@ -159,7 +159,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 1,
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -1542,6 +1542,7 @@ MapSeen(name) {
 ; A map never played before (UPD 21 brought new ones): the macro does not know where to walk.
 ; Seen twice in a row on the loading screen, a clean name ("Neo Tokyo", "Sky Aircraft"), not in
 ; maps_seen.txt / WALKS / StageWalk -> RS.newMap; StartMoves leaves the room and stops (NewMapStop).
+; NewMapStop=1 is for the owner only (settings.ini by hand, default 0, not in F8 / README) - friends play every map.
 IsKnownMap(name) {
     a := MapKey(name)
     if (StrLen(a) < 4)
@@ -1566,7 +1567,7 @@ IsKnownMap(name) {
 }
 NewMapCheck(name) {
     static cand := "", candN := 0
-    if (!(CFG.Get("NewMapStop", 1) + 0) || !RegExMatch(name, "^[A-Z][a-z]+(?:[- ][A-Z][a-z'.]+)+$|^[A-Z][a-z]{5,}$")) {
+    if (!(CFG.Get("NewMapStop", 0) + 0) || !RegExMatch(name, "^[A-Z][a-z]+(?:[- ][A-Z][a-z'.]+)+$|^[A-Z][a-z]{5,}$")) {
         cand := "", candN := 0
         return
     }

@@ -36,7 +36,7 @@ global DEF := Map(
     "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
     "Speed", 100, "ShopMinPts", 1, "UpgradeMode", "spot",
     "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 1,
+    "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0,
     "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
         . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
         . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
