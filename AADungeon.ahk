@@ -584,7 +584,7 @@ Screen(&r := "") {
     if RegExMatch(t, "Wave\s*\d")
         return "ingame"
     n := 0
-    for w in ["Units", "Store", "Items", "Play", "Trade", "Summon", "Contracts", "Dungeon", "Quests", "Areas"]
+    for w in ["Units", "Store", "Items", "Play", "Trade", "Summon", "Contracts", "Servers", "Dungeon", "Quests", "Areas"]
         n += InStr(t, w) ? 1 : 0
     if (n >= 4)
         return "lobby"
@@ -743,14 +743,15 @@ Start() {
 ; ============================================================ screens
 DoLobby(r) {
     RS.depth := 0, RS.bossDone := false, RS.chestsDone := false, RS.died := false, RS.toLobby := false
-    ; the Dungeon button (bottom of the left button column)
+    ; the Dungeon button (bottom of the left button column; since UPD 21 bottom left, Servers next to it)
     for wd in Words(r)
-        if (wd.t = "Dungeon" && wd.x < WIN.x + WIN.w * 0.25) {
+        if (RegExMatch(wd.t, "i)^Dung[eo]+n$") && wd.x < WIN.x + WIN.w * 0.25) {
             ClickAt(wd.x, wd.y - 30 * WIN.u)
             Wait(1500)
             return
         }
-    ClickRef(163, 695, "l", "c")
+    Out("  lobby: 'Dungeon' not read - clicking where its button is (UPD 21 layout)")
+    ClickRef(72, 690, "l", "c")                   ; (163,695 is the Servers button now)
     Wait(1500)
 }
 
