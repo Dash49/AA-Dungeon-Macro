@@ -1445,11 +1445,11 @@ RoomMap() {
         return ""
     name := "", prev := false
     for ln in Lines(r) {
-        if prev {
-            name := Trim(ln.t)
+        if (prev && RegExMatch(ln.t, "[A-Za-z]{3}") && !RegExMatch(ln.t, "i)^\s*(Depth|Curse|Difficulty)")) {
+            name := Trim(ln.t)                     ; (UPD 21: an HP line "97500/97500" can come first)
             break
         }
-        prev := RegExMatch(ln.t, "i)Dungeon\s*Room")
+        prev := prev || RegExMatch(ln.t, "i)Dungeon\s*Room")
     }
     if (name != "") {
         Out("  room map: " KnownMap(name))
@@ -3478,6 +3478,11 @@ PlaceUnit(slot, style := "random", pt0 := "") {
                     pn := OpenPanelName()
                     break
                 }
+            }
+            if (pn = "" && nm != "" && (cap := CapSeen())) {   ; "Cannot place more than N": read it
+                CapHit(slot, cap)                  ; now, it fades before the check below ends
+                Key("q")
+                return "cap"
             }
             if (pn = "" && nm != "") {             ; no panel came up: click the spot - a unit
                 CloseUnitPanel()                   ; standing there opens its panel
