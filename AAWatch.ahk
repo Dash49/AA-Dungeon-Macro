@@ -233,7 +233,22 @@ IsCyan(col) {
     r := (col >> 16) & 0xFF, g := (col >> 8) & 0xFF, b := col & 0xFF
     return (b > 200 && g > 150 && r < 90)
 }
+; Unit Overview open? Since UPD 21 it has no red Return button: the yellow "F" tab sits at its
+; left edge (x ~1190) while it is open (at the screen edge when closed). The old Return still counts.
 OverviewReturnVisible() {
+    n := 0
+    yy := 495
+    while (yy <= 585) {
+        xx := 1155
+        while (xx <= 1225) {
+            c := RGB(Color(PX(xx, "r"), PY(yy)))
+            n += (c.r > 200 && c.g > 170 && c.b < 90)
+            xx += 3
+        }
+        yy += 3
+    }
+    if (n >= 40)
+        return true
     n := 0
     for pt in [[1471, 973], [1576, 968], [1685, 973], [1490, 1005], [1690, 1005]] {
         c := RGB(Color(PX(pt[1], "r"), PY(pt[2])))

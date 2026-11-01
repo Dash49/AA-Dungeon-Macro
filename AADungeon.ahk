@@ -3616,7 +3616,22 @@ OverviewOpen() {
 
 ; the red Return button under the Unit Overview list
 ; (5 spots, 4 must be red: the "Activate Windows" text can lie over its top)
+; Unit Overview open? Since UPD 21 it has no red Return button: the yellow "F" tab sits at its
+; left edge (x ~1190) while it is open (at the screen edge when closed). The old Return still counts.
 OverviewReturnVisible() {
+    n := 0
+    yy := 495
+    while (yy <= 585) {
+        xx := 1155
+        while (xx <= 1225) {
+            c := RGB(Color(PX(xx, "r"), PY(yy)))
+            n += (c.r > 200 && c.g > 170 && c.b < 90)
+            xx += 3
+        }
+        yy += 3
+    }
+    if (n >= 40)
+        return true
     n := 0
     for pt in [[1471, 973], [1576, 968], [1685, 973], [1490, 1005], [1690, 1005]] {
         c := RGB(Color(PX(pt[1], "r"), PY(pt[2])))
@@ -3689,7 +3704,11 @@ CloseOverview() {
     if !OverviewReturnVisible()
         return false
     Loop 2 {
-        ClickRef(1576, 985, "r", "c")              ; Return
+        Snap()
+        if OverviewOldReturn()
+            ClickRef(1576, 985, "r", "c")          ; Return (old layout)
+        else
+            ClickRef(1190, 541, "r", "c")          ; the yellow F tab at its left edge (UPD 21)
         Wait(450)
         Snap()
         if !OverviewReturnVisible()
@@ -3698,6 +3717,14 @@ CloseOverview() {
     return false
 }
 
+OverviewOldReturn() {
+    n := 0
+    for pt in [[1471, 973], [1576, 968], [1685, 973], [1490, 1005], [1690, 1005]] {
+        c := RGB(Color(PX(pt[1], "r"), PY(pt[2])))
+        n += (c.r > 175 && c.g < 50 && c.b < 50)
+    }
+    return n >= 4
+}
 ; Cards are found from their pixels, not OCR (OCR missed the greyed
 ; "Upg" buttons, which shifted every card after it). Each card has a
 ; cyan "First" button; the Upg button is 45 above it, the bar under it.
@@ -3820,7 +3847,7 @@ OverviewScroll(dir) {
     MouseGetPos(&mx)
     if (mx < PX(1300, "r"))                        ; mouse must be over the list
         return false
-    topY := PY(244)                                ; Upg button of the top row when at the top
+    topY := PY(218)                                ; Upg button of the top row when at the top
     still := false, ignored := 0
     Loop 14 {
         if (dir = "WheelUp" && Abs(b[1].y - topY) < 12 * WIN.u) {
@@ -4259,7 +4286,7 @@ ListShift(a, b, dir) {
         v := 0
     return sg * v
 }
-CardIdx(c) => Round((c.y + MT.ovOff - PY(244)) / MT.rowH) * 2 + (c.x > PX(1633, "r") ? 2 : 1)
+CardIdx(c) => Round((c.y + MT.ovOff - PY(218)) / MT.rowH) * 2 + (c.x > PX(1633, "r") ? 2 : 1)
 ; the list position must be known: else go to the top (= position 0)
 OvSync(&r) {
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("ovOff"))
@@ -4272,7 +4299,7 @@ OvSync(&r) {
     if OverviewScroll("WheelUp") {
         Wait(250)
         r := OverviewRead()
-        if (r.open && r.cards.Length && Abs(r.cards[1].y - PY(244)) < 12 * WIN.u) {
+        if (r.open && r.cards.Length && Abs(r.cards[1].y - PY(218)) < 12 * WIN.u) {
             MT.ovOff := 0, MT.ovOk := true
             return true
         }
@@ -4440,7 +4467,7 @@ BottomCards(r2) {
     }
     sEst := -1                                     ; what the pixel scroll said (tie-break only)
     if (MT.HasOwnProp("ovOk") && MT.ovOk && MT.HasOwnProp("rowH") && MT.rowH)
-        sEst := Round((MT.ovOff + (r2.cards[1].y - PY(244))) / MT.rowH) * 2
+        sEst := Round((MT.ovOff + (r2.cards[1].y - PY(218))) / MT.rowH) * 2
     bestS := -1, bestBad := 99, bestOv := 0
     ; the list scrolls by whole rows of 2: the first card shown in the left
     ; column = an even shift, in the right column = an odd one
@@ -4483,7 +4510,7 @@ BottomOff(cards) {
     c := cards[1]
     col := (c.x > PX(1633, "r")) ? 2 : 1
     row := (MT.bottomS + 1 - col) // 2
-    MT.ovOff := row * MT.rowH - (c.y - PY(244)), MT.ovOk := true
+    MT.ovOff := row * MT.rowH - (c.y - PY(218)), MT.ovOk := true
 }
 ; card of unit u by number: copy k of its unit = its k-th card in the list
 CardByIdx(u) {
