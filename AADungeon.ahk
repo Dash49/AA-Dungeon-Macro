@@ -1555,9 +1555,15 @@ NewMapCheck(name) {
     }
 }
 ; a new map: leave the room (settings > Return to Lobby), tell the user, stop (F2 goes on)
-NewMapStop() {
+; onVote: the settings do not open during the vote (UPD 21) - noted, done when the match starts
+NewMapStop(onVote := false) {
     if !(RS.HasOwnProp("newMap") && RS.newMap != "" && A_TickCount - RS.newAt < 300000)
         return false
+    if onVote {
+        Out("New map '" RS.newMap "' - leaving as soon as the match starts (settings can't open on the vote screen)")
+        RS.newAt := A_TickCount
+        return true                                ; no walk, no camera work; DoVote votes, PlayMatch leaves
+    }
     nm := RS.newMap, RS.newMap := ""
     Out("New map '" nm "': no walk known for it - leaving the room and stopping the macro")
     ShotUi(RegExReplace(nm, "[^A-Za-z0-9]") "_newmap", "walk", 2000)
@@ -2176,6 +2182,8 @@ LoadPlan() {
 PlayMatch() {
     global MT
     Out("Match started - running the plan")
+    if NewMapStop()                                ; a new map seen on the vote screen: leave now
+        return
     MT := {planSteps: MT.planSteps, units: [], bad: [], good: [], capped: Map(), start: A_TickCount}
     for st in MT.planSteps                          ; the steps are shared between matches
         st.done := false, st.want := "", st.tries := 0, st.said := "", st.autoChk := false
@@ -2790,7 +2798,7 @@ Walk(k, sec, run := -1) {
 ; before the start: the top-down camera and the walk to the map's good spot. A map with a
 ; route in WALKS goes Capy's way (MapRouteGo), else the StageWalk list (old way: walk, then camera)
 StartMoves(onVote) {
-    if NewMapStop()                                ; a map never played: leave + stop
+    if NewMapStop(onVote)                          ; a map never played: leave + stop
         return
     if MapRouteGo(onVote)
         return
@@ -2857,7 +2865,10 @@ MapRouteGo(onVote) {
     RS.stageWalked := true                         ; StageWalk is not used on top of it
     Out("Map route: " nm " (Capy's camera, teleport to spawn, walk)")
     CapyCamera()
-    if !(sp := SpawnReset())
+    sp := true
+    if onVote                                      ; UPD 21: the settings do not open during the vote -
+        Out("  just spawned (vote screen) - no teleport needed")   ; and the room just started at the spawn
+    else if !(sp := SpawnReset())
         Out("  teleport to spawn did not work - walking from here")
     ok := PlayRoute(nm, WALKS[nm])
     Wait(300)
