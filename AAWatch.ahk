@@ -95,11 +95,11 @@ PanelRead() {
     if RegExMatch(t, "i)(?:Upgrade|UPG|UP6|UPC)\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") ? 1 : 0
-    if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; same as the macro
+    if RegExMatch(t, "i)Up\S{0,5}de?\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; same as the macro
         p.cost := Integer(RegExReplace(m[1], "\D"))
     best := "", top := ""
     for w in Words(r)                              ; the big button = the lowest "Upgrade" word,
-        if RegExMatch(w.t, "i)^upgrade") {         ; well below the "Upgrade [n]" box (the panel
+        if RegExMatch(w.t, "i)^up\S{0,5}de?:?$") {   ; ("Upgr&de:", "Upöde:" as OCR reads it)         ; well below the "Upgrade [n]" box (the panel
             if (!IsObject(best) || w.y > best.y)   ; can sit higher or lower on the screen)
                 best := w
             if (!IsObject(top) || w.y < top.y)

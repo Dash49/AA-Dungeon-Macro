@@ -2248,23 +2248,34 @@ ReadHotbarCosts() {
             if (StrLen(d) >= 2 && StrLen(d) <= 5 && d + 0 >= 50)
                 nums.Push({x: wd.x, v: d + 0})
         }
-        if (nums.Length != 6)
+        if (nums.Length < 2)
             continue
-        Loop 5 {                                    ; left to right
-            Loop 6 - A_Index {
-                i := A_Index
-                if (nums[i].x > nums[i + 1].x)
-                    t := nums[i], nums[i] := nums[i + 1], nums[i + 1] := t
+        ; each price belongs to the slot whose card it sits on (UPD 21 hotbar: card centres
+        ; 666 787 907 1021 1135 1254, the price at the card's right half) - a price the OCR
+        ; misses (busy portrait behind it) keeps the settings value
+        got := Map()
+        for n in nums {
+            bs := 0, bd := 9999
+            for i, cx in [666, 787, 907, 1021, 1135, 1254] {
+                d := Abs(n.x - PX(cx + 25))
+                if (d < bd)
+                    bd := d, bs := i
             }
-        }
-        txt := ""
-        for i, n in nums {
+            if (bd > 70 * WIN.u)
+                continue
             v := n.v
             if (v > 20000 && StrLen(v) >= 4)        ; "2000 ¥" read as 42000 / 20004
                 v := (Mod(v, 1000) = 0) ? SubStr(v, 2) + 0 : SubStr(v, 1, StrLen(v) - 1) + 0
             if (v >= 50 && v <= 20000)
-                CFG["Cost" i] := v
-            txt .= CFG["Cost" i] " "
+                got[bs] := v
+        }
+        if (got.Count < 2)
+            continue
+        txt := ""
+        Loop 6 {
+            if got.Has(A_Index)
+                CFG["Cost" A_Index] := got[A_Index]
+            txt .= CFG["Cost" A_Index] (got.Has(A_Index) ? "" : "(set)") " "
         }
         Out("Unit prices from hotbar: " txt)
         return
@@ -5013,12 +5024,12 @@ LvlNum(s) {
 }
 ; the level box "Upgrade [n]" (top right of the panel) read alone at 3x -> n or -1
 PanelLevel() {
-    r := OcrRef(280, 380, 450, 430, 3, "l", "c")             ; "UPG [n] (MAX)" (Nov 2026 UI)
+    r := OcrRef(283, 388, 445, 424, 3, "l", "c")             ; "UPG [n] (MAX)" (Nov 2026 UI, the yellow header only)
     if !IsObject(r)
         return -1
     if RegExMatch(r.t, "i)[\[(\{|]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]?", &m)
         return LvlNum(m[1])
-    if RegExMatch(r.t, "i)grade\D{0,3}(\d{1,2})\b", &m)
+    if RegExMatch(r.t, "i)(?:grade|UPG)\D{0,3}(\d{1,2})\b", &m)   ; "UPG 3" (brackets not read)
         return Integer(m[1])
     return -1
 }
@@ -5036,13 +5047,18 @@ PanelInfo() {
     if RegExMatch(t, "i)(?:Upgrade|UPG|UP6|UPC)\s*[\[(\{|l]\s*([0-9OIlSA]{1,2})\s*[\])\}|l1]", &m)
         p.lvl := LvlNum(m[1])
     p.max := RegExMatch(t, "i)\(\s*MAX\s*\)") > 0
-    if RegExMatch(t, "i)Upgrade\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; "Upgrade: 8500" ("Upgrade:] 8500")
+    if RegExMatch(t, "i)Up\S{0,5}de?\s*:\s*[\]|)}]?\s*([\d][\d,. ]*)", &m)   ; "Upgrade: 8500" ("Upgrade:] 8500")
         p.cost := Integer(RegExReplace(m[1], "\D"))
     if (p.lvl < 0 && !p.max)
         p.lvl := PanelLevel()                      ; the small "Upgrade [n]" box alone, bigger
+    if (p.cost < 0 && !p.max) {                    ; a grey button (not enough yen) is hard to read
+        br := OcrRef(295, 645, 520, 695, 3, "l", "c")             ; "Upgrade: 19600¥" alone, bigger
+        if (IsObject(br) && RegExMatch(RegExReplace(br.t, "(?<=\d)[ ,.](?=\d{3})", ""), "(\d{2,7})", &m))
+            p.cost := Integer(m[1]), p.greyBtn := true
+    }
     best := "", top := ""
     for w in Words(r)                              ; the big button = the lowest "Upgrade" word,
-        if RegExMatch(w.t, "i)^upgrade") {         ; well below the "Upgrade [n]" box (the panel
+        if RegExMatch(w.t, "i)^up\S{0,5}de?:?$") {   ; ("Upgr&de:", "Upöde:" as OCR reads it)         ; well below the "Upgrade [n]" box (the panel
             if (!IsObject(best) || w.y > best.y)   ; can sit higher or lower on the screen)
                 best := w
             if (!IsObject(top) || w.y < top.y)
@@ -5054,6 +5070,10 @@ PanelInfo() {
         p.max := true                              ; button says Max
     else if GreenUpgradeButton(&gx, &gy)           ; text not read: the green button by colour
         p.bx := gx, p.by := gy
+    else if (!p.max && p.cost > 0)                 ; price read, button not seen (grey: not enough
+        p.bx := PX(405, "l"), p.by := PY(670)      ; yen yet) - where it is on the UPD 21 panel
+    if (!p.by && !p.max && (Snap(), UnitPanelVisible()))   ; panel open, button text not read: grey = wait
+        p.greyBtn := true
     return p
 }
 ; the green Upgrade button on the unit panel's bottom row (right of First / Sell), by colour
@@ -5146,6 +5166,10 @@ PanelBuy(u, p, nm) {
         u.blindAt := A_TickCount
     }
     u.needYen := 0
+    if (!p.by && p.HasOwnProp("greyBtn")) {        ; its button is grey (not enough yen): wait, not
+        Status("saving yen for unit " u.slot " (" nm ")")   ; a missing button
+        return "poor"
+    }
     if !p.by {                                     ; no Upgrade button seen
         u.noBtn := (u.HasOwnProp("noBtn") ? u.noBtn : 0) + 1
         if (u.noBtn = 1 || Mod(u.noBtn, 20) = 0)
