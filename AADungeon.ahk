@@ -155,7 +155,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1,
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 1,
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -1472,6 +1472,7 @@ LoadingMap(r) {
                 continue                           ; not the map name - the next line
             if RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$") {
                 RS.mapName := name, RS.mapAt := A_TickCount   ; (MapRoute: this match's map)
+                NewMapCheck(name)                  ; never seen before? (before MapSeen adds it)
                 if (name != last) {
                     last := name
                     Out("  map: " name)
@@ -1510,6 +1511,94 @@ MapSeen(name) {
                 return
         FileAppend(name "`n", f, "UTF-8")
     }
+}
+; A map never played before (UPD 21 brought new ones): the macro does not know where to walk.
+; Seen twice in a row on the loading screen, a clean name ("Neo Tokyo", "Sky Aircraft"), not in
+; maps_seen.txt / WALKS / StageWalk -> RS.newMap; StartMoves leaves the room and stops (NewMapStop).
+IsKnownMap(name) {
+    a := MapKey(name)
+    if (StrLen(a) < 4)
+        return true                                ; too short to tell: treat as known
+    names := []
+    for nm, rt in WALKS
+        names.Push(nm)
+    for e in StrSplit(CFG.Get("StageWalk", ""), "|")
+        names.Push(StrSplit(e, "=")[1])
+    f := A_ScriptDir "\maps_seen.txt"
+    try {
+        if FileExist(f)
+            for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r")
+                names.Push(ln)
+    }
+    for nm in names {
+        b := MapKey(nm)
+        if (StrLen(b) >= 4 && (InStr(a, b) || InStr(b, a) || 1 - NameDist(a, b) / Max(StrLen(a), StrLen(b)) >= 0.75))
+            return true
+    }
+    return false
+}
+NewMapCheck(name) {
+    static cand := "", candN := 0
+    if (!(CFG.Get("NewMapStop", 1) + 0) || !RegExMatch(name, "^[A-Z][a-z]+(?:[- ][A-Z][a-z'.]+)+$|^[A-Z][a-z]{5,}$")) {
+        cand := "", candN := 0
+        return
+    }
+    if IsKnownMap(name) {
+        cand := "", candN := 0, RS.newMap := ""
+        return
+    }
+    candN := (name = cand) ? candN + 1 : 1, cand := name
+    if (candN = 2) {
+        RS.newMap := name, RS.newAt := A_TickCount
+        Out("  NEW MAP: " name " - never played before")
+    }
+}
+; a new map: leave the room (settings > Return to Lobby), tell the user, stop (F2 goes on)
+NewMapStop() {
+    if !(RS.HasOwnProp("newMap") && RS.newMap != "" && A_TickCount - RS.newAt < 300000)
+        return false
+    nm := RS.newMap, RS.newMap := ""
+    Out("New map '" nm "': no walk known for it - leaving the room and stopping the macro")
+    ShotUi(RegExReplace(nm, "[^A-Za-z0-9]") "_newmap", "walk", 2000)
+    Hook("🆕 New map: **" nm "** - the macro left the room and stopped. Find the spot to play, set its walk in F8 > ด่าน (or tell Claude), then press F2.", HookShot())
+    ok := ReturnToLobby()
+    Out(ok ? "  left the room (Return to Lobby)" : "  'Return to Lobby' not found - leave the room yourself")
+    try TrayTip("New map: " nm, "AA Dungeon stopped - set the walk for this map, then F2", 0x30)
+    SoundBeep(800, 300), SoundBeep(600, 300)
+    Sleep 3000
+    Reload()                                       ; = F3: stopped, waiting for F2
+    return true
+}
+; game settings > "Return to Lobby" (the row under Teleport back to Spawn), then a Yes/Confirm if one shows
+ReturnToLobby() {
+    Focus()
+    open := false
+    Loop 2 {
+        ClickRef(45, 1050, "l", "b")
+        Sleep 1000
+        if SettingsOpen() {
+            open := true
+            break
+        }
+    }
+    if !open
+        return false
+    Loop 14 {
+        for ln in Lines(OcrRef(620, 240, 1320, 800, 2)) {
+            lt := StrLower(RegExReplace(ln.t, "[^A-Za-z]"))
+            if (InStr(lt, "return") && InStr(lt, "lobby")) {
+                yy := ln.y + 10 * WIN.u
+                ClickAt(SpawnButtonX(yy), yy)
+                Sleep 1500
+                r := OcrAll()                      ; a confirm box?
+                if (IsObject(r) && (Find(r, "Yes", &x, &y) || Find(r, "Confirm", &x, &y)))
+                    ClickAt(x, y)
+                return true
+            }
+        }
+        SettingsWheel(A_Index <= 8 ? "WheelDown" : "WheelUp")
+    }
+    return false
 }
 ; the card opens beside the tile; its Enter button is a big bright green bar
 FindEnter(tx, &ex, &ey) {
@@ -2687,6 +2776,8 @@ Walk(k, sec, run := -1) {
 ; before the start: the top-down camera and the walk to the map's good spot. A map with a
 ; route in WALKS goes Capy's way (MapRouteGo), else the StageWalk list (old way: walk, then camera)
 StartMoves(onVote) {
+    if NewMapStop()                                ; a map never played: leave + stop
+        return
     if MapRouteGo(onVote)
         return
     RS.capyCam := false

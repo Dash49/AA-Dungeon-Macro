@@ -40,6 +40,8 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   CameraSetup redoes it) -> `SpawnReset` (gear; since a Nov 2026 game update the settings open at Gameplay with the row visible - no scroll; else 10 notches at Capy's spot; button x from its grey ring `SpawnButtonX`; `SpawnRow` OCR check, never a blind click:
   Return to Lobby is the next row; red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
   Other maps: `StageWalk` then `CameraSetup` (old way).
+  `NewMapStop`=1: a map never seen (`IsKnownMap`: maps_seen.txt / WALKS / StageWalk; clean name read twice on the loading screen,
+  `NewMapCheck` before `MapSeen` adds it) -> `NewMapStop` in `StartMoves`: Discord note, settings > Return to Lobby (`ReturnToLobby`), `Reload()`.
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.
   Plan syntax: `place 1 x3 [random|near|far|group|spread|cover|center|at X,Y]`,
   `upgrade 1,2 [max|to N|+N] [even|one] [until wave N]`, `ability 3 x2`, `auto 6`, `fusion 1` (auto on, then upgrade max; its slot learns the fused name - `MT.fuseStep`), `wait 5`, `wave 7`.
