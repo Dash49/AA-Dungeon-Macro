@@ -75,14 +75,16 @@ global WALKS := Map(
     "Nightmare Train", "1150a+ 2125LShift+ 4052LShift- 4717w+ 7477w- 8040s+ 9871a- 10306a+ 11164a- 11695a+ 12883s- 13026a-",
     "Future City", "828w+ 4111w- 4234d+ 4477d- 4554w+ 6041w-",
     "Strange Town", "940d+ 2597s+ 2606d- 3138s-")
+; walks the player recorded (F7) - walks_user.txt "Map=<timings>", never in the download; they win over WALKS
+global REC := {on: false, t0: 0, ev: [], held: Map()}
 global CFG := Map()
 
 Hotkey "F2", (*) => Start()
 Hotkey "F3", (*) => Reload()
 Hotkey "F4", (*) => TogglePause()
 Hotkey "F5", (*) => DebugSee()
-Hotkey "F6", (*) => (FindRoblox(), CameraSetup())          ; test the camera
-Hotkey "F7", (*) => (FindRoblox(), CameraSetup(2))
+Hotkey "F6", (*) => (FindRoblox(), CapyCamera())          ; the camera the walks use (before F7)
+Hotkey "F7", (*) => RecordToggle()                         ; record your walk on this map / save it
 Hotkey "F8", (*) => OpenSettings()                         ; settings window
 Hotkey "F9", (*) => OpenSettings("/report")                ; send a bug report
 
@@ -125,6 +127,7 @@ FileAppend("`n===== AA Dungeon started " FormatTime(, "yyyy-MM-dd HH:mm:ss") " =
 Out("Ready. Maximise Roblox, then press F2. (F3 stop, F4 pause, F5 debug)  mode: " CFG["Preset"])
 Status("AA Dungeon ready - F2 start")
 SelfUpdated()                                       ; remember this file's time (restart on a newer one)
+LoadUserWalks()                                     ; the walks recorded with F7
 SetTimer(CheckNewVersion, -1500)                    ; tell the user when an update is out
 OnError(ErrLog)                                     ; script errors go to the log too
 OnMessage(0x5A01, WatchYenMsg)                      ; the yen from AAWatch.ahk
@@ -1582,10 +1585,29 @@ NewMapCheck(name) {
 NewMapStop(onVote := false) {
     if !(RS.HasOwnProp("newMap") && RS.newMap != "" && A_TickCount - RS.newAt < 300000)
         return false
-    if onVote {
-        Out("New map '" RS.newMap "' - leaving as soon as the match starts (settings can't open on the vote screen)")
+    if onVote {                                    ; the player may be there: offer to record the walk now
+        nm := RS.newMap
+        try IniWrite(nm, INI, "Settings", "LastNewMap")
+        CapyCamera()                               ; the camera the walks are played with
+        Out("New map '" nm "' - press F7 within 40 s to record your walk to the spot (F7 again saves it)")
+        Hook("🆕 New map: **" nm "** - press F7 within 40 s and walk to the spot (F7 again saves it), else the macro leaves the room and stops.")
+        try TrayTip("New map: " nm, "F7 = record your walk now (40 s), F7 again = save", 0x30)
+        SoundBeep(800, 250), SoundBeep(1000, 250)
+        Status("NEW MAP " nm " - F7 to record your walk (40 s)")
+        t := A_TickCount
+        while (A_TickCount - t < 40000 && !REC.on)
+            Sleep 200
+        if REC.on {
+            while (REC.on && A_TickCount - t < 220000)
+                Sleep 200
+            if REC.on
+                RecordToggle()                     ; ~3 min: save what is there
+            RS.newMap := "", RS.stageWalked := true   ; walked (by the player): play this match
+            return true
+        }
+        Out("  no recording - leaving as soon as the match starts (settings can't open on the vote screen)")
         RS.newAt := A_TickCount
-        return true                                ; no walk, no camera work; DoVote votes, PlayMatch leaves
+        return true                                ; DoVote votes, PlayMatch leaves
     }
     nm := RS.newMap, RS.newMap := ""
     Out("New map '" nm "': no walk known for it - leaving the room and stopping the macro")
@@ -2876,6 +2898,100 @@ MapRoute() {
     }
     return ""
 }
+; ---- F7: record a walk yourself (a new map, or a better spot). Stand at the spawn with the walk
+; camera (vote screen: the macro sets it; else F6 first), F7, walk to the spot (W/A/S/D, Shift,
+; Space - do NOT turn the camera), F7 again -> saved for this map in walks_user.txt and used from then on.
+RecKeys() => ["w", "a", "s", "d", "LShift", "Space"]
+RecordToggle() {
+    if !REC.on {
+        FindRoblox()
+        REC.on := true, REC.t0 := A_TickCount, REC.ev := [], REC.held := Map()
+        for k in RecKeys() {
+            Hotkey("~*" k, RecKey.Bind(k, true), "On")
+            Hotkey("~*" k " up", RecKey.Bind(k, false), "On")
+        }
+        Status("RECORDING your walk - walk to the spot (don't turn the camera), then F7 to save")
+        Out("Walk recording started (F7 again saves it)")
+        SoundBeep(1000, 150)
+        return
+    }
+    REC.on := false
+    for k in RecKeys() {
+        try Hotkey("~*" k, "Off")
+        try Hotkey("~*" k " up", "Off")
+    }
+    tEnd := A_TickCount - REC.t0
+    for k, dn in REC.held                          ; still held: let go at the end
+        if dn
+            REC.ev.Push({t: tEnd, k: k, d: false})
+    SoundBeep(700, 150)
+    if (REC.ev.Length < 2) {
+        Status("walk not saved - no keys recorded")
+        return Out("Walk recording stopped - no movement keys, nothing saved")
+    }
+    sh := Max(0, REC.ev[1].t - 300)                ; start 0.3 s before the first key
+    spec := ""
+    for e in REC.ev
+        spec .= (spec != "" ? " " : "") (e.t - sh) e.k (e.d ? "+" : "-")
+    nm := MatchMap()
+    if (nm = "") {
+        last := IniRead(INI, "Settings", "LastNewMap", "")
+        ib := InputBox("Which map is this walk for? (the name as the loading screen shows it)", "AA Dungeon - save walk", "w420 h130", last)
+        if (ib.Result != "OK" || Trim(ib.Value) = "")
+            return Out("Walk recording: no map name - not saved")
+        nm := Trim(ib.Value)
+    }
+    SaveUserWalk(nm, spec)
+    Status("walk saved for " nm)
+    Out("Walk saved for " nm " (" REC.ev.Length " key presses, " Round((tEnd - sh) / 1000, 1) " s): " spec)
+    try TrayTip("Walk saved: " nm, "AA Dungeon uses it every time this map comes up", 0x10)
+}
+RecKey(k, down, *) {
+    if !REC.on
+        return
+    if (down && REC.held.Has(k) && REC.held[k])    ; key repeat while held
+        return
+    if (!down && !(REC.held.Has(k) && REC.held[k]))
+        return
+    REC.held[k] := down
+    REC.ev.Push({t: A_TickCount - REC.t0, k: k, d: down})
+}
+SaveUserWalk(nm, spec) {
+    f := A_ScriptDir "\walks_user.txt", keep := ""
+    try {
+        if FileExist(f)
+            for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r")
+                if (Trim(ln) != "" && MapKey(StrSplit(ln, "=")[1]) != MapKey(nm))
+                    keep .= ln "`n"
+        keep .= nm "=" spec "`n"
+        try FileDelete(f)
+        FileAppend(keep, f, "UTF-8")
+    }
+    for k, v in WALKS.Clone()                      ; replaces Capy's walk for the same map
+        if (MapKey(k) = MapKey(nm))
+            WALKS.Delete(k)
+    WALKS[nm] := spec
+}
+LoadUserWalks() {
+    f := A_ScriptDir "\walks_user.txt"
+    if !FileExist(f)
+        return
+    n := 0
+    try {
+        for ln in StrSplit(FileRead(f, "UTF-8"), "`n", "`r") {
+            p := StrSplit(ln, "=", , 2)
+            if (p.Length != 2 || Trim(p[1]) = "" || !RegExMatch(p[2], "^\d+\w+[+-]"))
+                continue
+            for k, v in WALKS.Clone()
+                if (MapKey(k) = MapKey(p[1]))
+                    WALKS.Delete(k)
+            WALKS[Trim(p[1])] := Trim(p[2]), n++
+        }
+    }
+    if n
+        Out("Walks you recorded (walks_user.txt): " n)
+}
+
 ; Capy's way: camera, back to the spawn point, then the recorded keys of WALKS
 MapRouteGo(onVote) {
     if (!(CFG.Get("MapRoutes", 1) + 0) || RS.stageWalked)

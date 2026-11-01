@@ -40,6 +40,9 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   CameraSetup redoes it) -> `SpawnReset` (gear; since a Nov 2026 game update the settings open at Gameplay with the row visible - no scroll; else 10 notches at Capy's spot; button x from its grey ring `SpawnButtonX`; `SpawnRow` OCR check, never a blind click:
   Return to Lobby is the next row; red X) -> `PlayRoute`. Map = newest of `RS.roomMap` (card) / `RS.mapName` (loading), 5 min.
   Other maps: `StageWalk` then `CameraSetup` (old way).
+  F7 `RecordToggle`: records the player's own walk (~* hotkeys on w/a/s/d/LShift/Space, key-up/down ms) -> `walks_user.txt`
+  (`SaveUserWalk`, loaded into WALKS at start by `LoadUserWalks`, wins over Capy's). F6 = `CapyCamera` (the walk camera).
+  A new map on the vote screen: `NewMapStop(true)` sets the camera and waits 40 s for F7; recorded -> plays on, else leaves.
   `NewMapStop`=1: a map never seen (`IsKnownMap`: maps_seen.txt / WALKS / StageWalk; clean name read twice on the loading screen,
   `NewMapCheck` before `MapSeen` adds it) -> `NewMapStop` in `StartMoves`: Discord note, settings > Return to Lobby (`ReturnToLobby`), `Reload()`.
 - Match: `PlayMatch()` runs the steps of plan.txt via `RunStep()`.

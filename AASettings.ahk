@@ -427,7 +427,7 @@ BuildGui() {
 
     ; ------------------------------------- แท็บ 5: ด่าน (เดินก่อนเริ่ม)
     tab.UseTab(5)
-    G.AddText("x25 y45 w750 cGray", "เจอชื่อด่านนี้ (การ์ดห้อง / หน้าโหลด) = กด Shift วิ่งตามท่าข้างล่างก่อนเช็คเนินและกดโหวต  ทำครั้งเดียวต่อห้อง")
+    G.AddText("x25 y45 w750 cGray", "ไม่อยากพิมพ์? ในเกมกด F7 แล้วเดินไปจุดที่ต้องการ กด F7 อีกครั้ง = มาโครจำการเดินของด่านนั้นเอง  /  หรือใส่ท่าในรายการข้างล่าง")
     C.mlv := G.AddListView("x25 y70 w530 h230 -Multi Grid", ["ชื่อด่าน", "การเดิน (ทำตามลำดับ)"])
     C.mlv.ModifyCol(1, 190), C.mlv.ModifyCol(2, 320)
     C.mlv.OnEvent("ItemSelect", (ctl, row, sel) => (sel && row <= Stages.Length) ? (C.mname.Value := Stages[row].name, C.mmoves.Value := Stages[row].moves) : 0)
