@@ -699,7 +699,7 @@ Start() {
             StageCheck(r.t)                        ; stage name (StageWalk)
         if (s = "result" || s = "reward" || s = "afterroom" || s = "died") {
             RS.ready := false, RS.endAt := A_TickCount ; a match just ended
-            RS.stage := "", RS.stageWalked := false, RS.voteAt := 0, RS.walkLater := ""
+            RS.stage := "", RS.stageWalked := false, RS.voteAt := 0
         }
         if (s != "ingame" && s != "vote" && closes < 2 && CloseUi()) {
             closes++                               ; closed it - look at the screen again
@@ -2262,15 +2262,6 @@ PlayMatch() {
     else
         StageWalk()                                 ; not done on the vote screen
     RS.camVote := false                             ; next match sets it again
-    if (RS.HasOwnProp("walkLater") && RS.walkLater != "") {   ; your walk: teleport to spawn, then walk
-        wnm := RS.walkLater, RS.walkLater := ""
-        if !(sp := SpawnReset())
-            Out("  teleport to spawn did not work - walking from here")
-        ok := WALKS.Has(wnm) ? PlayRoute(wnm, WALKS[wnm]) : false
-        Wait(300)
-        ShotWalk("your walk " wnm (sp ? "" : ", no teleport") (ok ? "" : ", walk stopped"))
-        RS.hillScan := ""                           ; hills were seen from the spawn: look again
-    }
     if !IsObject(RS.hillScan)                       ; hills not checked on the vote screen
         HillScan()
     if IsObject(RS.hillScan)                        ; ground units keep off these hills
@@ -2923,7 +2914,7 @@ RecordToggle() {
         }
         if !InStr(AllText(), "Starts in") {         ; in a match: start at the spawn, like the playback
             Out("Walk recording: teleport to spawn first")
-            SpawnReset()
+            SpawnTp()
             REC.t0 := A_TickCount, REC.ev := [], REC.held := Map()
         }
         Status("RECORDING your walk - walk to the spot (don't turn the camera), then F7 to save")
@@ -3023,13 +3014,16 @@ MapRouteGo(onVote) {
         return false
     }
     RS.stageWalked := true                         ; StageWalk is not used on top of it
-    if (onVote && USERWALK.Has(MapKey(nm))) {      ; the player's own walk: always teleport first -
-        CapyCamera()                               ; the settings do not open on the vote screen
-        RS.walkLater := nm
-        Out("Map route: " nm " (your walk) - after the vote: teleport to spawn, then walk")
+    if USERWALK.Has(MapKey(nm)) {                  ; the player's own walk: teleport first, walk, then vote
+        Out("Map route: " nm " (your walk: camera, teleport to spawn, walk)")
+        CapyCamera()
+        SpawnTp()
+        ok := PlayRoute(nm, WALKS[nm])
+        Wait(300)
+        ShotWalk("your walk " nm (ok ? "" : ", walk stopped"))
         return true
     }
-    Out("Map route: " nm (USERWALK.Has(MapKey(nm)) ? " (your walk, " : " (Capy's ") "camera, teleport to spawn, walk)")
+    Out("Map route: " nm " (Capy's camera, teleport to spawn, walk)")
     CapyCamera()
     sp := true
     if onVote                                      ; UPD 21: the settings do not open during the vote -
@@ -3045,6 +3039,22 @@ MapRouteGo(onVote) {
 ; "Teleport back to Spawn" and the red X. Capy scrolls 6 notches at 800x600; measured live at
 ; 1920x1080 (2026-10-31): 10 notches put the row in the middle (button at 1192,612; 9 = row at the
 ; bottom edge). The row is checked by OCR and never clicked blind: "Return to Lobby" is right under it.
+; the user's way (2026-11-02): fixed clicks, no OCR - the gear, then the "Teleport back to
+; Spawn" button (measured live: settings open at Gameplay, button 1190,620); the game closes
+; the settings itself after the teleport
+SpawnTp() {
+    Focus()
+    ToolTip(, , , 1)                               ; (the status text sits right above the gear)
+    ClickRef(45, 1050, "l", "b")                   ; gear
+    Sleep 1200
+    ClickRef(1190, 620)                            ; Teleport back to Spawn
+    Sleep 1200
+    if SettingsOpen() {                            ; still open: close it (red X)
+        ClickRef(1305, 233)
+        Sleep 600
+    }
+    Out("  spawn: gear + Teleport to Spawn clicked")
+}
 SpawnReset() {
     Focus()
     CloseUi()                                      ; the Unit Overview covers the settings' X
