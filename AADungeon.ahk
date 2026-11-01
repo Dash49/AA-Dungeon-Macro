@@ -2298,8 +2298,11 @@ ReadHotbarCosts() {
             if (bd > 70 * WIN.u)
                 continue
             v := n.v
-            if (v > 20000 && StrLen(v) >= 4)        ; "2000 ¥" read as 42000 / 20004
-                v := (Mod(v, 1000) = 0) ? SubStr(v, 2) + 0 : SubStr(v, 1, StrLen(v) - 1) + 0
+            if (StrLen(v) >= 5) {                  ; "1100 ¥" read as 11100 / 11004: a digit too many -
+                a1 := SubStr(v, 2) + 0, a2 := SubStr(v, 1, StrLen(v) - 1) + 0   ; the one nearer the setting
+                st := CFG["Cost" bs] + 0
+                v := (Abs(a1 - st) <= Abs(a2 - st)) ? a1 : a2
+            }
             if (v >= 50 && v <= 20000)
                 got[bs] := v
         }
