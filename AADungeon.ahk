@@ -160,7 +160,7 @@ LoadConfig() {
         "StageWalk", "Magic Hill=a 3 jump|Snowy Town=d 3 jump, w 1 jump|Haunted Academy=d 3 jump",
         "Speed", 100, "ShotScreens", 0, "ShopMinPts", 1, "UpgradeMode", "spot",
         "StopAfterLosses", 4, "StopAtLives", 1, "Webhook", "", "WebhookShots", 1,
-        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0,
+        "StuckRejoin", 10, "PrivateServer", "", "CurseAvoid", "", "MapRoutes", 1, "NewMapStop", 0, "MapTeams", "",
         "Items", "Mask of Riches=100|Philosophers Stone=95|Genie Lamp=90|Golden Mushroom=85|Celestial Blade=80"
             . "|Golden Fishhook=75|Archmage's Hat=70|Aures Maul=70|Shimmering Moon Fragment=60"
             . "|Solar Cleaver=55|Reaper Scythe=50|Magic Tome=50|Glacial Axe=50|Fish Hook=45|Speedy Boots=45"
@@ -656,6 +656,14 @@ Start() {
     DllCall("SetThreadExecutionState", "uint", 0x80000003)
     SetTimer(Watchdog, 30000)
     RS.ready := false, RS.endAt := A_TickCount, RS.startAt := RS.endAt ; never assume a new match at start
+    if !(RS.HasOwnProp("mapAt") && A_TickCount - RS.mapAt < 300000) {   ; F2 on the vote screen: the map
+        lms := StrSplit(IniRead(INI, "Settings", "LastMapSeen", ""), "|")   ; of the loading screen before
+        if (lms.Length = 2 && RegExMatch(lms[2], "^\d{14}$")) {
+            ago := DateDiff(A_Now, lms[2], "Seconds")
+            if (ago >= 0 && ago < 300)
+                RS.mapName := lms[1], RS.mapAt := A_TickCount - ago * 1000, Out("  map (seen " ago " s ago): " lms[1])
+        }
+    }
     Focus()
     Out("Started. client " WIN.w "x" WIN.h " scale " Round(WIN.u, 3) ", plan " MT.planSteps.Length " steps")
     Status("running")
@@ -1500,6 +1508,7 @@ LoadingMap(r) {
                 continue                           ; not the map name - the next line
             if RegExMatch(name, "^[A-Za-z][A-Za-z' .-]{2,40}$") {
                 RS.mapName := name, RS.mapAt := A_TickCount   ; (MapRoute: this match's map)
+                try IniWrite(name "|" A_Now, INI, "Settings", "LastMapSeen")   ; kept over F3 / restarts
                 NewMapCheck(name)                  ; never seen before? (before MapSeen adds it)
                 if (name != last) {
                     last := name
@@ -2850,13 +2859,57 @@ Walk(k, sec, run := -1) {
 StartMoves(onVote) {
     if NewMapStop(onVote)                          ; a map never played: leave + stop
         return
-    if MapRouteGo(onVote)
-        return
-    RS.capyCam := false
-    howWalk := (RS.stage != "" && !RS.stageWalked) ? "StageWalk " RS.stageMove : "no walk"
-    StageWalk()
-    CameraSetup()
-    ShotWalk(howWalk)
+    if !MapRouteGo(onVote) {
+        RS.capyCam := false
+        howWalk := (RS.stage != "" && !RS.stageWalked) ? "StageWalk " RS.stageMove : "no walk"
+        StageWalk()
+        CameraSetup()
+        ShotWalk(howWalk)
+    }
+    if onVote                                      ; units can only change before the start
+        TeamLoad(MatchMap())
+}
+; the team saved for this map (settings MapTeams "Sky Island:2; Other Map:3" = row in the game's
+; Switch Team list): K (Units) > Teams > LOAD in its row, 1 s between clicks, fixed spots measured
+; from the user's shots (no name reading - user wish)
+TeamLoad(nm) {
+    row := 0, other := 0
+    for ent in StrSplit(CFG.Get("MapTeams", ""), ";") {
+        pr := StrSplit(ent, ":")
+        if (pr.Length != 2 || !RegExMatch(Trim(pr[2]), "^[1-3]$"))
+            continue
+        if (Trim(pr[1]) = "*")                     ; "*:1" = the team for every other map
+            other := Trim(pr[2]) + 0
+        else if (nm != "" && MapKey(pr[1]) = MapKey(nm))
+            row := Trim(pr[2]) + 0
+    }
+    if (!row && nm != "")
+        row := other
+    if !row
+        return false
+    if (STATE.HasOwnProp("team") && STATE.team = row)   ; already loaded (same team as last match)
+        return false
+    STATE.team := row
+    Out("Team for " nm ": Units (K) > Teams > LOAD team " row)
+    Focus()
+    Key("k")                                       ; Collection
+    Sleep 1000
+    ClickRef(958, 375)                             ; Teams
+    Sleep 1000
+    ClickRef(1237, 410 + (row - 1) * 143)          ; LOAD (rows 410 / 553 / 696)
+    Sleep 1000
+    ClickRef(1307, 233)                            ; red X of Switch Team
+    Sleep 1000
+    Snap(), red := 0                               ; Collection still open: its red X (1443,316)
+    for pt in [[1420, 300], [1465, 335], [1425, 300], [1462, 330], [1415, 310], [1470, 320]] {
+        c := RGB(Color(PX(pt[1]), PY(pt[2])))
+        red += (c.r > 170 && c.g < 80 && c.b < 80)
+    }
+    if (red >= 2) {
+        ClickRef(1443, 316)
+        Sleep 700
+    }
+    return true
 }
 ; ShotScreens=1: a picture of every map right after the walk (where the units go from here),
 ; shots\walk\<time>_<map>_walk.jpg (newest 2000) + shots\walk\walks.txt (map, how it walked)
