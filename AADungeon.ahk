@@ -556,7 +556,7 @@ ReadWave() {
 ; the big red X (white cross in the middle) of the Dungeon Run panel
 BoardXVisible() {
     Snap()
-    for pt in [[1500, 181], [1585, 181], [1542, 140], [1542, 225]] {
+    for pt in [[1500, 181], [1585, 181], [1542, 140], [1542, 210]] {   ; (225 is its dark edge since Nov 2026)
         c := RGB(Color(PX(pt[1]), PY(pt[2])))
         if !(c.r > 170 && c.g < 50 && c.b < 50)
             return false
@@ -588,10 +588,12 @@ Screen(&r := "") {
         return "shrine"
     if RegExMatch(t, "i)Room selected|Teleporting|Travelling")
         return "loading"
-    if RegExMatch(t, "DUNGEON\s*DEPTH")
+    if RegExMatch(t, "DUNGEON\s*DEPTH|QUIT\s*DUNGEON")
         return "route"
     if (InStr(t, "Pick your own") && InStr(t, "Continue"))
         return "shop"
+    if RegExMatch(t, "i)Pick\s*your\s*own\s*path")         ; the room board (Nov 2026: the lobby buttons show around it)
+        return "route"
     if InStr(t, "Enter Dungeon")
         return "intro"
     if InStr(t, "Click anywhere") || RegExMatch(t, "i)anywhere\s*to\s*cont")
@@ -1480,7 +1482,7 @@ RoomMap() {
         return ""
     name := "", prev := false
     for ln in Lines(r) {
-        if (prev && RegExMatch(ln.t, "[A-Za-z]{3}") && !RegExMatch(ln.t, "i)^\s*(Depth|Curse|Difficulty)")) {
+        if (prev && RegExMatch(ln.t, "[A-Za-z]{3}") && !RegExMatch(ln.t, "i)^\W*(Depth|Curse|Difficulty|Enter|Wave)")) {   ; ("-Enter-" button once read as the map)
             name := Trim(ln.t)                     ; (UPD 21: an HP line "97500/97500" can come first)
             break
         }
@@ -3011,7 +3013,8 @@ MapRoute() {
             continue
         for nm, rt in WALKS {
             b := MapKey(nm)                        ; "Magic Hill" on screen = "Magic Hills"
-            if (InStr(a, b) || InStr(b, a) || 1 - NameDist(a, b) / Max(StrLen(a), StrLen(b)) >= 0.8)
+            if (((InStr(a, b) || InStr(b, a)) && Min(StrLen(a), StrLen(b)) >= 0.7 * Max(StrLen(a), StrLen(b)))   ; ("enter" in "spacecenter" walked Navy Bay as Space Center)
+                || 1 - NameDist(a, b) / Max(StrLen(a), StrLen(b)) >= 0.8)
                 return nm
         }
     }
