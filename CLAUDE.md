@@ -120,6 +120,7 @@ syntax (see pitfalls) – a syntax error stops the macro for every user.
   close RobloxPlayerBeta.exe, `Run(link)` (browser), wait for the window, restart with `/autostart` (`AutoStart` waits for a big window).
 - `SelfUpdated()` on the room board: the macro file is newer than at start -> runs the new file with `/autostart` and exits
   (deploys / F8 > Update take effect at a safe moment, no F3/F2 needed).
+- Remote Desktop use (README section, `rdp/` = .rdp file for 127.0.0.2 at 1920x1080 + .reg RemoteDesktop_SuppressWhenMinimized=2): a second Windows user runs the macro in its own session. Never touch processes by name across sessions: `Rejoin` closes only `OwnRobloxPids()` (WMI SessionId = ours). A disconnected session has no input desktop -> `IsLocked` -> the macro waits.
 - `StopAfterLosses` (default 4): `STATE.lossRow` counts DEFEATs in a row (VICTORY resets); at the limit -> Discord message + `Reload()` (= F3).
 - `ShotScreens=1` (settings.ini only, deliberately not in F8/README – only the owner uses it): JPG of every dungeon
   screen and room card in `shots\ui` (`ShotUi`), newest 500 kept; every room board in `shots\route`

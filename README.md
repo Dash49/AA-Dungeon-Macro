@@ -213,6 +213,25 @@ Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"
 
 ---
 
+## ใช้คอมไปด้วยระหว่างรันมาโคร (Remote Desktop)
+
+มาโครคุมเมาส์กับคีย์บอร์ดจริง เลยใช้คอมพร้อมกันบนหน้าจอเดียวไม่ได้  วิธีที่คนรันมาโคร Roblox นิยมใช้คือ **ให้มาโครรันในบัญชี Windows อีกบัญชี ผ่าน Remote Desktop เข้าเครื่องตัวเอง** มาโครจะอยู่ในหน้าต่างของมันเอง ส่วนคุณใช้คอมได้ตามปกติ
+
+**ข้อควรรู้ก่อนทำ**
+- Windows ปกติให้ต่อ Remote Desktop ได้ทีละคน ต้องใช้โปรแกรมเสริม เช่น **RDP Wrapper** (Windows Home ก็ต้องใช้ตัวนี้)  Defender จะแจ้งว่าเป็น `PUA:Win32/RDPWrap` และ Microsoft ถือว่าผิดเงื่อนไขการใช้ Windows ทำแล้วรับความเสี่ยงเอง
+- อัปเดต Windows อาจทำให้ใช้ไม่ได้ ต้องอัปเดตไฟล์ `rdpwrap.ini` ใหม่
+- **ห้ามเล่น Roblox ด้วยบัญชี Roblox เดียวกัน**ในหน้าจอหลักระหว่างมาโครรัน
+
+**ขั้นตอน**
+1. สร้างบัญชี Windows ใหม่ (Settings > Accounts > Other users) **ต้องตั้งรหัสผ่าน**
+2. ติดตั้ง RDP Wrapper แล้วเปิด `RDPConf.exe` ให้ขึ้น **Fully supported** (ถ้าขึ้น not supported ให้อัปเดต `rdpwrap.ini`)
+3. ดับเบิลคลิก `rdp\RDP-keep-drawing-when-minimized.reg` ในบัญชีหลัก (ย่อหน้าต่าง Remote Desktop แล้วภาพยังวาด มาโครยังเห็นเกม)
+4. เปิด `rdp\AAMacro-RDP.rdp` แล้วล็อกอินด้วยบัญชีใหม่ (จอในนั้นเป็น 1920x1080 ปรับขนาดหน้าต่างได้)
+5. ในบัญชีใหม่: Display scale **100%**, ติดตั้ง Roblox (ล็อกอิน) + AutoHotkey v2, ก๊อปโฟลเดอร์มาโครทั้งโฟลเดอร์ไปไว้ในบัญชีนั้น แล้วเปิด Roblox ให้เต็มจอ กด F2
+6. จะใช้คอม: **ย่อหน้าต่าง Remote Desktop** (อย่ากด Disconnect หรือ Sign out ไม่งั้นภาพหยุด มาโครจะรอจนกว่าจะต่อกลับ)
+
+ถ้า Roblox ในนั้นกระตุก (ไม่มีการ์ดจอ): Windows Pro เปิด gpedit > Computer Configuration > Administrative Templates > Windows Components > Remote Desktop Services > Remote Desktop Session Host > Remote Session Environment > **Use hardware graphics adapters for all Remote Desktop Services sessions** = Enabled
+
 ## แก้ปัญหา
 
 | อาการ | วิธีแก้ |

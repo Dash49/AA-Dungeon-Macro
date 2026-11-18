@@ -237,10 +237,12 @@ Rejoin(why) {
     STATE.taskAt := A_TickCount                    ; (no second rejoin while this one runs)
     if (link != "") {
         StopWatchers()
-        Loop 5 {                                   ; close Roblox
-            if !ProcessExist("RobloxPlayerBeta.exe")
+        Loop 5 {                                   ; close Roblox - only this Windows session's (RDP:
+            pids := OwnRobloxPids()                ; another user's Roblox on the same PC stays open)
+            if !pids.Length
                 break
-            try ProcessClose("RobloxPlayerBeta.exe")
+            for pid in pids
+                try ProcessClose(pid)
             Sleep 1500
         }
         Sleep 2000
@@ -258,6 +260,21 @@ Rejoin(why) {
     }
     Run('"' A_AhkPath '" "' A_ScriptFullPath '" /autostart')
     ExitApp()
+}
+; RobloxPlayerBeta.exe processes of this Windows session (a second user over Remote Desktop
+; runs its own Roblox on the same PC - ProcessClose by name could pick the other one)
+OwnRobloxPids() {
+    pids := [], mine := 0
+    DllCall("ProcessIdToSessionId", "uint", DllCall("GetCurrentProcessId"), "uint*", &mine)
+    try {
+        for pr in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId, SessionId FROM Win32_Process WHERE Name = 'RobloxPlayerBeta.exe'")
+            if (pr.SessionId = mine)
+                pids.Push(pr.ProcessId)
+    } catch {
+        for hw in WinGetList("ahk_exe RobloxPlayerBeta.exe")   ; (windows are per session anyway)
+            try pids.Push(WinGetPID(hw))
+    }
+    return pids
 }
 ; /autostart: wait (up to 5 min) for a big Roblox window, then F2
 ; the macro file changed on disk since it started (an update was copied in while it ran):
