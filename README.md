@@ -226,7 +226,7 @@ Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"
 1. สร้างบัญชี Windows ใหม่ (Settings > Accounts > Other users) **ต้องตั้งรหัสผ่าน**
 2. ติดตั้ง RDP Wrapper แล้วเปิด `RDPConf.exe` ให้ขึ้น **Fully supported** (ถ้าขึ้น not supported ให้อัปเดต `rdpwrap.ini`)
 3. ดับเบิลคลิก `rdp\RDP-keep-drawing-when-minimized.reg` ในบัญชีหลัก (ย่อหน้าต่าง Remote Desktop แล้วภาพยังวาด มาโครยังเห็นเกม)
-4. เปิด `rdp\AAMacro-RDP.rdp` แล้วล็อกอินด้วยบัญชีใหม่ (จอในนั้นเป็น 1920x1080 ปรับขนาดหน้าต่างได้)
+4. เปิด `rdp\AAMacro-RDP.rdp` แล้วล็อกอินด้วยบัญชีใหม่ (จอในนั้นเป็น 1920x1080 สเกล 100% เสมอ แม้จอจริงจะตั้ง 125% ปรับขนาดหน้าต่างได้)
 5. ในบัญชีใหม่: Display scale **100%**, ติดตั้ง Roblox (ล็อกอิน) + AutoHotkey v2, ก๊อปโฟลเดอร์มาโครทั้งโฟลเดอร์ไปไว้ในบัญชีนั้น แล้วเปิด Roblox ให้เต็มจอ กด F2
 6. จะใช้คอม: **ย่อหน้าต่าง Remote Desktop** (อย่ากด Disconnect หรือ Sign out ไม่งั้นภาพหยุด มาโครจะรอจนกว่าจะต่อกลับ)
 
